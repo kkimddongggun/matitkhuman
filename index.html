@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>맛있쿠만 - 경희대 맛집 지도</title>
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Malgun Gothic', sans-serif; }
+        #map { width: 100vw; height: 100vh; }
+
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            width: 300px;
+        }
+        .control-panel h3 { margin: 0 0 12px 0; color: #9E1B32; font-size: 18px; }
+        .control-panel input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .control-panel button {
+            width: 100%;
+            padding: 10px;
+            background-color: #9E1B32;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 6px;
+        }
+        .control-panel button:hover { background-color: #7d1527; }
+        .btn-sub { background-color: #03C75A !important; } /* 네이버 초록색 */
+        .btn-sub:hover { background-color: #02a94d !important; }
+        .guide-text { font-size: 11px; color: #666; margin-top: 6px; line-height: 1.4; }
+    </style>
+
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=l8sy9w57mc&submodules=geocoder"></script>
+</head>
+<body>
+
+    <div class="control-panel">
+        <h3>🍽️ 맛있쿠만 핀 추가</h3>
+        
+        <!-- 1. 네이버 지도 링크로 자동 추출 -->
+        <input type="text" id="naverLink" placeholder="네이버 지도 링크 붙여넣기 (https://naver.me/...)">
+        <button class="btn-sub" onclick="fetchFromNaverLink()">1. 링크에서 가게 정보 불러오기</button>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 12px 0;">
+
+        <!-- 2. 불러온 정보 확인 및 추가 입력 -->
+        <input type="text" id="placeName" placeholder="맛집 이름">
+        <input type="text" id="placeAddress" placeholder="도로명 주소">
+        <input type="text" id="menuInfo" placeholder="추천 메뉴 / 웨이팅 여부 (직접 입력)">
+        <button onclick="addMarkerToMap()">2. 지도에 핀 꽂기</button>
+
+        <div class="guide-text">
+            💡 네이버 지도 앱/웹에서 <b>[공유] → [URL 복사]</b>한 링크를 넣고 1번 버튼을 누르면 이름과 주소가 자동으로 채워집니다.
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        const map = new naver.maps.Map('map', {
+            center: new naver.maps.LatLng(37.5939, 127.0547),
+            zoom: 16
+        });
+
+        let fetchedDescription = "";
+
+        // 파이썬 서버(/api/parse)에 네이버 지도 링크를 보내 이름과 주소를 받아오는 함수
+        async function fetchFromNaverLink() {
+            const link = document.getElementById('naverLink').value.trim();
+            if (!link) {
+                alert('네이버 지도 공유 링크를 먼저 붙여넣어 주세요!');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/parse?url=${encodeURIComponent(link)}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    alert(data.message);
+                    return;
+                }
+
+                // 받아온 가게 이름과 주소를 입력칸에 자동으로 채워 넣음
+                document.getElementById('placeName').value = data.name || '';
+                document.getElementById('placeAddress').value = data.address || '';
+                fetchedDescription = data.description || '';
+
+                if (!data.address) {
+                    alert('가게 이름은 불러왔지만 주소가 자동 추출되지 않았습니다. 주소를 직접 입력해 주세요.');
+                }
+            } catch (error) {
+                alert('서버와 통신할 수 없습니다. 터미널에서 python server.py가 실행 중인지 확인해 주세요.');
+            }
+        }
+
+        // 채워진 이름과 주소를 바탕으로 지도에 핀을 꽂는 함수
+        function addMarkerToMap() {
+            const name = document.getElementById('placeName').value.trim();
+            const address = document.getElementById('placeAddress').value.trim();
+            const link = document.getElementById('naverLink').value.trim();
+            const menu = document.getElementById('menuInfo').value.trim();
+
+            if (!name || !address) {
+                alert('맛집 이름과 주소가 모두 채워져 있어야 합니다!');
+                return;
+            }
+
+            naver.maps.Service.geocode({ query: address }, function(status, response) {
+                if (status !== naver.maps.Service.Status.OK || response.v2.addresses.length === 0) {
+                    alert('주소를 좌표로 변환하지 못했습니다. 주소를 조금 더 간결하게(예: 서울 동대문구 경희대로 26) 수정해 보세요.');
+                    return;
+                }
+
+                const result = response.v2.addresses[0];
+                const coords = new naver.maps.LatLng(result.y, result.x);
+
+                const marker = new naver.maps.Marker({
+                    position: coords,
+                    map: map
+                });
+
+                const linkHtml = link ? `<br><a href="${link}" target="_blank" style="color:#03C75A; font-weight:bold; text-decoration:none;">👉 네이버 지도에서 상세보기</a>` : '';
+                const descHtml = fetchedDescription ? `<br><span style="color:#777; font-size:12px;">ℹ️ ${fetchedDescription}</span>` : '';
+
+                const infoWindow = new naver.maps.InfoWindow({
+                    content: `
+                        <div style="padding:14px; min-width:200px; max-width:260px; line-height:1.5; font-size:13px;">
+                            <strong style="font-size:15px; color:#9E1B32;">${name}</strong><br>
+                            <span style="color:#444;">📍 ${address}</span>
+                            ${descHtml}<br>
+                            <span>🍴 ${menu || '추천메뉴 미입력'}</span>
+                            ${linkHtml}
+                        </div>
+                    `
+                });
+
+                naver.maps.Event.addListener(marker, 'click', function() {
+                    if (infoWindow.getMap()) {
+                        infoWindow.close();
+                    } else {
+                        infoWindow.open(map, marker);
+                    }
+                });
+
+                // 핀 생성 즉시 정보창 열고 지도 중심 이동
+                infoWindow.open(map, marker);
+                map.setCenter(coords);
+
+                // 다음 등록을 위해 입력창 초기화
+                document.getElementById('naverLink').value = '';
+                document.getElementById('placeName').value = '';
+                document.getElementById('placeAddress').value = '';
+                document.getElementById('menuInfo').value = '';
+                fetchedDescription = '';
+            });
+        }
+    </script>
+</body>
+</html>
