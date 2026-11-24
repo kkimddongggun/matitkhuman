@@ -6,25 +6,449 @@
     <title>맛있쿠만 - 경희대 국제캠 맛집 지도</title>
     <style>
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 0; font-family: 'Malgun Gothic', 'Pretendard', sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; font-family: 'Pretendard', 'Malgun Gothic', sans-serif; overflow: hidden; background: #f8f9fa; }
         #map { width: 100vw; height: 100vh; }
 
-        /* 좌측 등록 패널 */
-        .control-panel {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
+        /* ==========================================
+           1. 첫 화면: 중앙 랜딩 & 카테고리 선택 모달
+           ========================================== */
+        .landing-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(8px);
+            z-index: 1500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .landing-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .landing-card {
             background: white;
-            padding: 20px;
+            width: 520px;
+            max-width: 92vw;
+            border-radius: 24px;
+            padding: 32px 28px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+            text-align: center;
+            position: relative;
+            animation: popIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes popIn {
+            from { transform: scale(0.92); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .landing-badge {
+            display: inline-block;
+            background: #ffe3e3;
+            color: #9E1B32;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .landing-card h2 {
+            margin: 0 0 6px 0;
+            font-size: 26px;
+            color: #111;
+            font-weight: 800;
+        }
+        .landing-card p {
+            margin: 0 0 22px 0;
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 랜딩 검색창 */
+        .landing-search-box {
+            position: relative;
+            margin-bottom: 22px;
+        }
+        .landing-search-box input {
+            width: 100%;
+            padding: 14px 48px 14px 18px;
+            border: 2px solid #e9ecef;
             border-radius: 14px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            width: 320px;
-            max-height: calc(100vh - 40px);
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .landing-search-box input:focus {
+            border-color: #9E1B32;
+            box-shadow: 0 0 0 4px rgba(158, 27, 50, 0.1);
+        }
+        .landing-search-box button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #9E1B32;
+            border: none;
+            color: white;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 카테고리 그리드 */
+        .category-title {
+            text-align: left;
+            font-size: 13px;
+            font-weight: 700;
+            color: #495057;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 22px;
+        }
+        .category-btn {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 14px;
+            padding: 12px 6px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .category-btn:hover {
+            background: #fff0f3;
+            border-color: #ffc9c9;
+            transform: translateY(-2px);
+        }
+        .category-btn .icon { font-size: 22px; }
+        .category-btn .label { font-size: 12px; font-weight: 600; color: #333; }
+
+        .landing-footer-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 14px;
+            border-top: 1px solid #f1f3f5;
+            font-size: 13px;
+        }
+        .btn-view-all {
+            background: none;
+            border: none;
+            color: #9E1B32;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .btn-view-all:hover { text-decoration: underline; }
+        .btn-admin-link {
+            color: #888;
+            text-decoration: none;
+            font-size: 12px;
+        }
+        .btn-admin-link:hover { color: #333; }
+
+        /* ==========================================
+           2. 상단 네비게이션 & 컴팩트 필터 바
+           ========================================== */
+        .top-nav {
+            position: absolute;
+            top: 16px;
+            left: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+        }
+        .top-nav > * { pointer-events: auto; }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: white;
+            padding: 6px 14px;
+            border-radius: 30px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        }
+        .nav-logo {
+            font-weight: 800;
+            color: #9E1B32;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .current-filter-badge {
+            background: #9E1B32;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-change-cat {
+            background: #f1f3f5;
+            border: none;
+            color: #495057;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-change-cat:hover { background: #e9ecef; }
+
+        .nav-right {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-action {
+            background: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.15s, background 0.15s;
+        }
+        .btn-action:hover { transform: translateY(-1px); }
+        .btn-primary-action {
+            background: #9E1B32;
+            color: white;
+        }
+        .btn-primary-action:hover { background: #7d1527; }
+
+        /* ==========================================
+           3. 콤팩트 커스텀 핀 (가게이름, 대표메뉴, 평점)
+           ========================================== */
+        .custom-pin {
+            background: white;
+            border: 1.5px solid #9E1B32;
+            border-radius: 10px;
+            padding: 5px 9px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+            width: max-content;
+            max-width: 135px;
+            cursor: pointer;
+            position: relative;
+            transform: translate(-50%, -100%);
+            margin-top: -10px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            user-select: none;
+        }
+        .custom-pin:hover {
+            transform: translate(-50%, -105%) scale(1.05);
+            box-shadow: 0 6px 18px rgba(158, 27, 50, 0.35);
+            z-index: 999 !important;
+        }
+        .pin-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-bottom: 2px;
+        }
+        .pin-name {
+            font-size: 12px;
+            font-weight: 800;
+            color: #111;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pin-rating {
+            font-size: 11px;
+            font-weight: 800;
+            color: #e65100;
+            white-space: nowrap;
+        }
+        .pin-menu {
+            font-size: 10px;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: #f8f9fa;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+        .pin-arrow {
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid #9E1B32;
+        }
+
+        /* ==========================================
+           4. 맛집 상세 정보 및 리뷰 서랍 (Drawer)
+           ========================================== */
+        .drawer {
+            position: fixed;
+            top: 0; right: 0;
+            width: 360px;
+            max-width: 90vw;
+            height: 100vh;
+            background: white;
+            box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+            z-index: 1200;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        .drawer.open { transform: translateX(0); }
+        .drawer-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            position: relative;
+        }
+        .drawer-close {
+            position: absolute;
+            top: 18px; right: 18px;
+            background: #f1f3f5;
+            border: none;
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .drawer-title { margin: 0 0 4px 0; font-size: 20px; color: #9E1B32; font-weight: 800; padding-right: 32px; }
+        .drawer-category {
+            display: inline-block;
+            background: #f1f3f5;
+            color: #495057;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+        }
+        .drawer-address { font-size: 13px; color: #555; margin-bottom: 6px; }
+        .drawer-menu { font-size: 13px; color: #222; font-weight: 600; }
+
+        .drawer-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .rating-banner {
+            background: #fff8e1;
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+            color: #e65100;
+            font-weight: 800;
+            font-size: 16px;
+            margin-bottom: 18px;
+        }
+
+        .review-list { margin-bottom: 18px; }
+        .review-card {
+            background: #f8f9fa;
+            border: 1px solid #edf2f7;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .review-card-top {
+            display: flex;
+            justify-content: space-between;
+            color: #ff9800;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .drawer-footer {
+            padding: 16px 20px;
+            border-top: 1px solid #eee;
+            background: #fafafa;
+        }
+        .review-input-row { display: flex; gap: 6px; margin-bottom: 6px; }
+        .review-input-row select {
+            width: 95px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 12px;
+            background: white;
+        }
+        .review-input-row input {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+        .btn-submit-review {
+            width: 100%;
+            background: #9E1B32;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* ==========================================
+           5. 맛집 등록 모달 창 (분리된 등록 팝업)
+           ========================================== */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-box {
+            background: white;
+            width: 420px;
+            max-width: 90vw;
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+            max-height: 90vh;
             overflow-y: auto;
         }
-        .control-panel h3 { margin: 0 0 14px 0; color: #9E1B32; font-size: 19px; display: flex; align-items: center; gap: 6px; }
-        .control-panel input, .control-panel select {
+        .modal-box h3 { margin: 0 0 16px 0; color: #9E1B32; font-size: 19px; display: flex; justify-content: space-between; align-items: center; }
+        .modal-close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: #888; }
+        .modal-box input, .modal-box select {
             width: 100%;
             padding: 10px 12px;
             margin-bottom: 8px;
@@ -32,344 +456,546 @@
             border-radius: 8px;
             font-size: 13px;
             outline: none;
-            transition: border-color 0.2s;
         }
-        .control-panel input:focus, .control-panel select:focus {
-            border-color: #9E1B32;
-        }
-        .control-panel button {
+        .btn-parse {
             width: 100%;
-            padding: 11px;
-            background-color: #9E1B32;
+            background: #03C75A;
             color: white;
             border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 13px;
-            cursor: pointer;
-            margin-bottom: 8px;
-            transition: background-color 0.2s;
-        }
-        .control-panel button:hover { background-color: #7d1527; }
-        .btn-sub { background-color: #03C75A !important; }
-        .btn-sub:hover { background-color: #02a94d !important; }
-        .guide-text { font-size: 11px; color: #777; margin-top: 4px; line-height: 1.4; }
-
-        /* 상단 카테고리 필터 바 */
-        .category-filter-bar {
-            position: absolute;
-            top: 20px;
-            left: 360px;
-            z-index: 1000;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 8px 12px;
-            border-radius: 30px;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.12);
-            backdrop-filter: blur(4px);
-        }
-        .filter-btn {
-            border: 1px solid #e0e0e0;
-            background: white;
-            color: #444;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .filter-btn:hover { background: #f5f5f5; border-color: #bbb; }
-        .filter-btn.active {
-            background-color: #9E1B32;
-            color: white;
-            border-color: #9E1B32;
-            box-shadow: 0 2px 6px rgba(158, 27, 50, 0.3);
-        }
-
-        /* 인포윈도우 스타일 */
-        .info-card {
-            padding: 16px;
-            width: 310px;
-            max-height: 480px;
-            overflow-y: auto;
-            font-size: 13px;
-            line-height: 1.5;
-            color: #333;
-        }
-        .info-card h4 {
-            margin: 0 0 4px 0;
-            font-size: 17px;
-            color: #9E1B32;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .info-card .category-badge {
-            font-size: 11px;
-            background: #f1f3f5;
-            color: #495057;
-            padding: 2px 7px;
-            border-radius: 10px;
-            font-weight: normal;
-        }
-        .info-card .meta-row { margin-bottom: 6px; color: #555; }
-        .info-card .rating-summary {
-            background: #fff8e1;
-            padding: 6px 10px;
-            border-radius: 8px;
-            font-weight: bold;
-            color: #e65100;
-            margin: 8px 0;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .info-card hr {
-            border: 0;
-            border-top: 1px solid #eee;
-            margin: 12px 0;
-        }
-
-        /* 리뷰 섹션 */
-        .reviews-container {
-            max-height: 150px;
-            overflow-y: auto;
-            margin-bottom: 12px;
-            padding-right: 4px;
-        }
-        .review-item {
-            background: #fdfdfd;
-            border: 1px solid #f0f0f0;
-            border-radius: 6px;
-            padding: 8px 10px;
-            margin-bottom: 6px;
-            font-size: 12px;
-        }
-        .review-item .review-top {
-            display: flex;
-            justify-content: space-between;
-            color: #ff9800;
-            font-size: 11px;
-            margin-bottom: 3px;
-        }
-        .review-item .review-date { color: #999; font-size: 10px; }
-        .review-item .review-comment { color: #333; word-break: break-all; }
-
-        /* 리뷰 입력 폼 */
-        .review-form {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            background: #fafafa;
             padding: 10px;
             border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            margin-bottom: 12px;
         }
-        .review-form .form-row {
-            display: flex;
-            gap: 6px;
-        }
-        .review-form select {
-            width: 90px;
-            padding: 6px;
-            font-size: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background: white;
-        }
-        .review-form input {
-            flex: 1;
-            padding: 6px 8px;
-            font-size: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-        }
-        .review-form button {
+        .btn-save-restaurant {
+            width: 100%;
             background: #9E1B32;
             color: white;
             border: none;
-            padding: 7px;
-            border-radius: 6px;
-            font-size: 12px;
+            padding: 11px;
+            border-radius: 8px;
             font-weight: bold;
+            font-size: 14px;
             cursor: pointer;
+            margin-top: 6px;
         }
-        .review-form button:hover { background: #7d1527; }
     </style>
 
-    <!-- 1. 네이버 지도 API + Geocoder 서브모듈 -->
+    <!-- 네이버 지도 API + Geocoder -->
     <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=l8sy9w57mc&submodules=geocoder"></script>
-    <!-- 2. Supabase JS 클라이언트 SDK CDN -->
+    <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-    <!-- 좌측 등록 패널 -->
-    <div class="control-panel">
-        <h3>🍽️ 맛있쿠만 핀 추가</h3>
-        
-        <!-- 1. 네이버 지도 링크로 자동 추출 -->
-        <input type="text" id="naverLink" placeholder="네이버 지도 링크 (https://naver.me/...)">
-        <button class="btn-sub" onclick="fetchFromNaverLink()">1. 링크에서 가게 정보 불러오기</button>
+    <!-- 1. 첫 화면: 맛집 검색 및 '뭘 먹고 싶으신가요?' 카테고리 선택 모달 -->
+    <div class="landing-overlay" id="landingOverlay">
+        <div class="landing-card">
+            <span class="landing-badge">경희대 맛집 탐방 '맛있쿠만'</span>
+            <h2>오늘 뭘 먹고 싶으신가요? 🍽️</h2>
+            <p>카테고리를 선택하거나 메뉴/가게 이름을 검색해 보세요!</p>
 
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 12px 0;">
+            <!-- 검색창 -->
+            <div class="landing-search-box">
+                <input type="text" id="landingSearchInput" placeholder="가게 이름 또는 먹고 싶은 메뉴 (예: 파스타, 돈까스)" onkeydown="if(event.key==='Enter') executeLandingSearch()">
+                <button type="button" onclick="executeLandingSearch()">🔍</button>
+            </div>
 
-        <!-- 2. 불러온 정보 확인 및 카테고리/메뉴 입력 -->
-        <input type="text" id="placeName" placeholder="맛집 이름 *">
-        <input type="text" id="placeAddress" placeholder="도로명 주소 *">
-        
-        <select id="placeCategory">
-            <option value="한식">🍚 한식</option>
-            <option value="중식">🥟 중식</option>
-            <option value="일식">🍣 일식</option>
-            <option value="양식">🍝 양식</option>
-            <option value="카페/디저트">☕ 카페 / 디저트</option>
-            <option value="주점/술집">🍺 주점 / 술집</option>
-            <option value="패스트푸드">🍔 패스트푸드 / 분식</option>
-            <option value="기타" selected>🍴 기타</option>
-        </select>
+            <div class="category-title">
+                <span>음식 종류 선택하기</span>
+            </div>
 
-        <input type="text" id="menuInfo" placeholder="추천 메뉴 / 웨이팅 팁 (선택)">
-        <button onclick="saveRestaurantAndPin()">2. 맛집 핀 등록하기</button>
+            <!-- 카테고리 선택 그리드 -->
+            <div class="category-grid">
+                <button class="category-btn" onclick="selectCategory('한식')">
+                    <span class="icon">🍚</span>
+                    <span class="label">한식</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('중식')">
+                    <span class="icon">🥟</span>
+                    <span class="label">중식</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('일식')">
+                    <span class="icon">🍣</span>
+                    <span class="label">일식</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('양식')">
+                    <span class="icon">🍝</span>
+                    <span class="label">양식</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('카페/디저트')">
+                    <span class="icon">☕</span>
+                    <span class="label">카페/디저트</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('주점/술집')">
+                    <span class="icon">🍺</span>
+                    <span class="label">술집/주점</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('패스트푸드')">
+                    <span class="icon">🍔</span>
+                    <span class="label">분식/패스트</span>
+                </button>
+                <button class="category-btn" onclick="selectCategory('기타')">
+                    <span class="icon">🍴</span>
+                    <span class="label">기타 맛집</span>
+                </button>
+            </div>
 
-        <div class="guide-text">
-            💡 네이버 지도 앱/웹에서 <b>[공유] → [URL 복사]</b>한 링크를 넣고 1번 버튼을 누르면 이름과 주소가 자동으로 채워집니다.
+            <div class="landing-footer-actions">
+                <button class="btn-view-all" onclick="selectCategory('전체')">📍 모든 맛집 핀 둘러보기</button>
+                <a href="admin.html" class="btn-admin-link">⚙️ 관리자 모드</a>
+            </div>
         </div>
     </div>
 
-    <!-- 상단 카테고리 필터 바 -->
-    <div class="category-filter-bar">
-        <button class="filter-btn active" onclick="filterCategory('전체')">전체보기</button>
-        <button class="filter-btn" onclick="filterCategory('한식')">🍚 한식</button>
-        <button class="filter-btn" onclick="filterCategory('중식')">🥟 중식</button>
-        <button class="filter-btn" onclick="filterCategory('일식')">🍣 일식</button>
-        <button class="filter-btn" onclick="filterCategory('양식')">🍝 양식</button>
-        <button class="filter-btn" onclick="filterCategory('카페/디저트')">☕ 카페/디저트</button>
-        <button class="filter-btn" onclick="filterCategory('주점/술집')">🍺 술집</button>
-        <button class="filter-btn" onclick="filterCategory('패스트푸드')">🍔 분식/패스트푸드</button>
-        <button class="filter-btn" onclick="filterCategory('기타')">🍴 기타</button>
+    <!-- 2. 상단 네비게이션 & 필터 상태 바 -->
+    <div class="top-nav">
+        <div class="nav-left">
+            <div class="nav-logo" onclick="openLanding()">
+                <span>🍽️ 맛있쿠만</span>
+            </div>
+            <div class="current-filter-badge" id="currentFilterText">
+                선택 안 됨
+            </div>
+            <button class="btn-change-cat" onclick="openLanding()">카테고리 변경</button>
+        </div>
+
+        <div class="nav-right">
+            <button class="btn-action btn-primary-action" onclick="openAddModal()">
+                <span>+ 맛집 추가</span>
+            </button>
+            <button class="btn-action" onclick="location.href='admin.html'">
+                <span>⚙️ 관리자</span>
+            </button>
+        </div>
     </div>
 
-    <!-- 네이버 지도 영역 -->
+    <!-- 3. 지도 영역 -->
     <div id="map"></div>
+
+    <!-- 4. 맛집 상세 정보 및 리뷰 서랍 (Drawer) -->
+    <div class="drawer" id="detailDrawer">
+        <div class="drawer-header">
+            <button class="drawer-close" onclick="closeDrawer()">✕</button>
+            <div class="drawer-category" id="drawerCategory">한식</div>
+            <h3 class="drawer-title" id="drawerTitle">가게 이름</h3>
+            <div class="drawer-address" id="drawerAddress">📍 주소</div>
+            <div class="drawer-menu" id="drawerMenu">🍴 대표: 메뉴</div>
+            <div id="drawerLinkContainer" style="margin-top: 8px;"></div>
+        </div>
+
+        <div class="drawer-body">
+            <div class="rating-banner" id="drawerRatingBanner">
+                ⭐ 평점 로딩 중...
+            </div>
+
+            <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px;">💬 방문자 한줄평 & 별점</div>
+            <div class="review-list" id="drawerReviewList">
+                <div style="color: #888; font-size: 12px; text-align: center; padding: 15px;">리뷰를 불러오는 중입니다...</div>
+            </div>
+        </div>
+
+        <div class="drawer-footer">
+            <div class="review-input-row">
+                <select id="newRevRating">
+                    <option value="5">⭐⭐⭐⭐⭐ 5점</option>
+                    <option value="4">⭐⭐⭐⭐ 4점</option>
+                    <option value="3">⭐⭐⭐ 3점</option>
+                    <option value="2">⭐⭐ 2점</option>
+                    <option value="1">⭐ 1점</option>
+                </select>
+                <input type="text" id="newRevComment" placeholder="한줄평 (예: 최고예요!)" onkeydown="if(event.key==='Enter') submitReviewFromDrawer()">
+            </div>
+            <button class="btn-submit-review" onclick="submitReviewFromDrawer()">별점 & 리뷰 등록</button>
+        </div>
+    </div>
+
+    <!-- 5. 분리된 맛집 등록 모달 -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal-box">
+            <h3>
+                <span>🍽️ 새로운 맛집 핀 등록</span>
+                <button class="modal-close-btn" onclick="closeAddModal()">✕</button>
+            </h3>
+
+            <!-- 1. 네이버 링크 자동 추출 -->
+            <input type="text" id="naverLinkInput" placeholder="네이버 지도 공유 링크 (https://naver.me/...)">
+            <button class="btn-parse" onclick="fetchFromNaverLinkModal()">1. 네이버 링크에서 정보 자동 추출</button>
+
+            <!-- 2. 가게 정보 입력 -->
+            <input type="text" id="modalPlaceName" placeholder="맛집 이름 *">
+            <input type="text" id="modalPlaceAddress" placeholder="도로명 주소 *">
+            
+            <select id="modalPlaceCategory">
+                <option value="한식">🍚 한식</option>
+                <option value="중식">🥟 중식</option>
+                <option value="일식">🍣 일식</option>
+                <option value="양식">🍝 양식</option>
+                <option value="카페/디저트">☕ 카페 / 디저트</option>
+                <option value="주점/술집">🍺 주점 / 술집</option>
+                <option value="패스트푸드">🍔 분식 / 패스트푸드</option>
+                <option value="기타" selected>🍴 기타</option>
+            </select>
+
+            <input type="text" id="modalMenuInfo" placeholder="대표 메뉴 (예: 파스타, 짬뽕) *">
+            
+            <button class="btn-save-restaurant" onclick="saveRestaurantFromModal()">2. 지도에 핀 등록하기</button>
+        </div>
+    </div>
 
     <script>
         // ==========================================
-        // ⚙️ 1. Supabase 연동 설정
+        // ⚙️ Supabase 연동 설정
         // ==========================================
         const SUPABASE_URL = 'https://nvcpdziimebnrpzajbdf.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_2bBWoHmzoDGlo9KIXMBjLw_nOl2M7mx';
-        
         let supabaseClient = null;
-        if (window.supabase && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('여기에')) {
+        if (window.supabase) {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         }
 
         // ==========================================
-        // 🗺️ 2. 네이버 지도 초기화 (경희대 국제캠퍼스 정문)
+        // 🗺️ 네이버 지도 초기화 (경희대 국제캠 정문)
         // ==========================================
-        const KYUNGHEE_GLOBAL_GATE = new naver.maps.LatLng(37.2430, 127.0811);
+        const KYUNGHEE_GATE = new naver.maps.LatLng(37.2430, 127.0811);
         const map = new naver.maps.Map('map', {
-            center: KYUNGHEE_GLOBAL_GATE,
+            center: KYUNGHEE_GATE,
             zoom: 16
         });
 
-        let markersList = [];
-        let fetchedDescription = "";
-        let currentOpenInfoWindow = null;
+        let allRestaurantsData = [];
+        let allMarkers = []; // [{ id, category, marker, data }]
+        let selectedRestaurantForDrawer = null;
+        let fetchedDescModal = "";
 
-        // 페이지 로드 시 기존 등록된 맛집들 불러오기
-        window.addEventListener('DOMContentLoaded', () => {
-            loadRestaurants();
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadAllRestaurantsData();
+            // 첫 화면은 핀을 띄우지 않고, 랜딩 모달 유지!
         });
 
+        // 1. 전체 맛집 데이터 불러오기 (Supabase + LocalStorage)
+        async function loadAllRestaurantsData() {
+            let list = [];
+            const keySet = new Set();
+
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('restaurants')
+                        .select('*')
+                        .order('id', { ascending: false });
+
+                    if (!error && data) {
+                        data.forEach(item => {
+                            keySet.add(`${item.name}_${item.address}`);
+                            list.push(item);
+                        });
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+            }
+
+            try {
+                const locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                locals.forEach(item => {
+                    const key = `${item.name}_${item.address}`;
+                    if (!keySet.has(key)) {
+                        keySet.add(key);
+                        list.push(item);
+                    }
+                });
+            } catch (e) {}
+
+            allRestaurantsData = list;
+        }
+
+        // 2. 카테고리 선택 시 해당 카테고리의 핀만 지도에 표시!
+        function selectCategory(category) {
+            document.getElementById('landingOverlay').classList.add('hidden');
+            document.getElementById('currentFilterText').innerText = category === '전체' ? '📍 전체 맛집' : `🍴 ${category}`;
+            
+            showFilteredMarkers(category, null);
+        }
+
+        // 3. 첫 화면 검색 실행
+        function executeLandingSearch() {
+            const query = document.getElementById('landingSearchInput').value.trim();
+            if (!query) {
+                alert('검색어를 입력해 주세요!');
+                return;
+            }
+            document.getElementById('landingOverlay').classList.add('hidden');
+            document.getElementById('currentFilterText').innerText = `🔍 "${query}"`;
+            
+            showFilteredMarkers(null, query);
+        }
+
+        function openLanding() {
+            document.getElementById('landingOverlay').classList.remove('hidden');
+            document.getElementById('landingSearchInput').value = '';
+        }
+
+        // 4. 필터링된 핀만 지도에 표시하는 핵심 함수
+        function showFilteredMarkers(category, searchKeyword) {
+            // 기존 마커 모두 지도에서 제거
+            allMarkers.forEach(m => m.marker.setMap(null));
+            allMarkers = [];
+
+            const filtered = allRestaurantsData.filter(item => {
+                if (searchKeyword) {
+                    const q = searchKeyword.toLowerCase();
+                    const name = (item.name || '').toLowerCase();
+                    const menu = (item.menu || '').toLowerCase();
+                    const cat = (item.category || '').toLowerCase();
+                    return name.includes(q) || menu.includes(q) || cat.includes(q);
+                }
+                if (category === '전체') return true;
+                return item.category === category;
+            });
+
+            if (filtered.length === 0) {
+                alert('해당 조건의 맛집 핀이 아직 등록되지 않았습니다. 우측 상단의 [+ 맛집 추가]로 첫 맛집을 등록해보세요!');
+                return;
+            }
+
+            // 콤팩트하고 겹치지 않는 커스텀 마커 생성
+            filtered.forEach(item => {
+                createCompactMarker(item);
+            });
+
+            // 첫 번째 마커 좌표로 부드럽게 이동
+            if (filtered[0] && filtered[0].lat && filtered[0].lng) {
+                map.panTo(new naver.maps.LatLng(filtered[0].lat, filtered[0].lng));
+            }
+        }
+
+        // 5. 콤팩트 커스텀 핀 생성 (가게이름, 대표음식, 평점만 깔끔하게 노출)
+        function createCompactMarker(item) {
+            const coords = new naver.maps.LatLng(item.lat, item.lng);
+
+            // 가게 평점 계산
+            const ratingDisplay = item.avg_rating ? item.avg_rating.toFixed(1) : 'NEW';
+
+            const markerContent = `
+                <div class="custom-pin">
+                    <div class="pin-top">
+                        <span class="pin-name">${escapeHtml(item.name || '맛집')}</span>
+                        <span class="pin-rating">⭐ ${ratingDisplay}</span>
+                    </div>
+                    <div class="pin-menu">${escapeHtml(item.menu || item.category || '추천메뉴')}</div>
+                    <div class="pin-arrow"></div>
+                </div>
+            `;
+
+            const marker = new naver.maps.Marker({
+                position: coords,
+                map: map,
+                icon: {
+                    content: markerContent,
+                    anchor: new naver.maps.Point(60, 44)
+                }
+            });
+
+            // 핀 클릭 시 상세 서랍(Drawer) 오픈
+            naver.maps.Event.addListener(marker, 'click', function() {
+                openDetailDrawer(item);
+                map.panTo(coords);
+            });
+
+            allMarkers.push({
+                id: item.id,
+                category: item.category,
+                marker: marker,
+                data: item
+            });
+        }
+
         // ==========================================
-        // 📥 3. 네이버 링크 파싱 (/api/parse)
+        // 📋 맛집 상세 정보 & 리뷰 서랍 (Drawer)
         // ==========================================
-        async function fetchFromNaverLink() {
-            const link = document.getElementById('naverLink').value.trim();
+        async function openDetailDrawer(item) {
+            selectedRestaurantForDrawer = item;
+
+            document.getElementById('drawerTitle').innerText = item.name;
+            document.getElementById('drawerCategory').innerText = item.category || '기타';
+            document.getElementById('drawerAddress').innerText = `📍 ${item.address || '주소 정보 없음'}`;
+            document.getElementById('drawerMenu').innerText = `🍴 대표 메뉴: ${item.menu || '미등록'}`;
+
+            const linkContainer = document.getElementById('drawerLinkContainer');
+            if (item.naver_link) {
+                linkContainer.innerHTML = `<a href="${item.naver_link}" target="_blank" style="color:#03C75A; font-weight:700; text-decoration:none; font-size:12px;">👉 네이버 지도 바로가기</a>`;
+            } else {
+                linkContainer.innerHTML = '';
+            }
+
+            document.getElementById('detailDrawer').classList.add('open');
+
+            // 리뷰 목록 로드
+            await loadDrawerReviews(item.id);
+        }
+
+        function closeDrawer() {
+            document.getElementById('detailDrawer').classList.remove('open');
+            selectedRestaurantForDrawer = null;
+        }
+
+        // 리뷰 로드
+        async function loadDrawerReviews(restaurantId) {
+            const listEl = document.getElementById('drawerReviewList');
+            const ratingBanner = document.getElementById('drawerRatingBanner');
+            listEl.innerHTML = '<div style="color: #888; font-size: 12px; text-align: center; padding: 15px;">리뷰를 불러오는 중입니다...</div>';
+
+            let reviews = [];
+
+            if (supabaseClient && typeof restaurantId === 'number') {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('reviews')
+                        .select('*')
+                        .eq('restaurant_id', restaurantId)
+                        .order('created_at', { ascending: false });
+
+                    if (!error && data) reviews = reviews.concat(data);
+                } catch (e) {}
+            }
+
+            try {
+                const allLoc = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                const locList = allLoc[restaurantId] || [];
+                reviews = reviews.concat(locList);
+            } catch (e) {}
+
+            if (reviews.length === 0) {
+                ratingBanner.innerHTML = '⭐ 등록된 리뷰 0개 (첫 리뷰를 남겨보세요!)';
+                listEl.innerHTML = '<div style="color: #999; font-size: 12px; text-align: center; padding: 20px;">아직 작성된 리뷰가 없습니다. ✨</div>';
+                return;
+            }
+
+            const sum = reviews.reduce((acc, cur) => acc + (Number(cur.rating) || 0), 0);
+            const avg = (sum / reviews.length).toFixed(1);
+            ratingBanner.innerHTML = `⭐ <b>${avg}</b> / 5.0 (${reviews.length}개의 리뷰)`;
+
+            let html = '';
+            reviews.forEach(r => {
+                const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(r.rating) || 5)));
+                const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : '';
+                html += `
+                    <div class="review-card">
+                        <div class="review-card-top">
+                            <span>${stars} (${r.rating}점)</span>
+                            <span style="color:#aaa;">${dateStr}</span>
+                        </div>
+                        <div style="color:#333;">${escapeHtml(r.comment || '')}</div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        }
+
+        // 리뷰 등록
+        async function submitReviewFromDrawer() {
+            if (!selectedRestaurantForDrawer) return;
+
+            const rating = parseInt(document.getElementById('newRevRating').value, 10);
+            const commentInput = document.getElementById('newRevComment');
+            const comment = commentInput.value.trim();
+
+            if (!comment) {
+                alert('한줄평을 입력해주세요!');
+                commentInput.focus();
+                return;
+            }
+
+            const rId = selectedRestaurantForDrawer.id;
+            const newRev = {
+                restaurant_id: typeof rId === 'number' ? rId : null,
+                rating: rating,
+                comment: comment,
+                created_at: new Date().toISOString()
+            };
+
+            // 1) Supabase 저장 시도
+            if (supabaseClient && typeof rId === 'number') {
+                try {
+                    await supabaseClient.from('reviews').insert([{
+                        restaurant_id: rId,
+                        rating: rating,
+                        comment: comment
+                    }]);
+                } catch (e) {}
+            }
+
+            // 2) LocalStorage 백업
+            try {
+                const allLoc = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                if (!allLoc[rId]) allLoc[rId] = [];
+                allLoc[rId].unshift(newRev);
+                localStorage.setItem('matitkhuman_reviews', JSON.stringify(allLoc));
+            } catch (e) {}
+
+            commentInput.value = '';
+            await loadDrawerReviews(rId);
+        }
+
+        // ==========================================
+        // ➕ 분리된 맛집 등록 모달 창 제어
+        // ==========================================
+        function openAddModal() {
+            document.getElementById('addModal').style.display = 'flex';
+        }
+
+        function closeAddModal() {
+            document.getElementById('addModal').style.display = 'none';
+        }
+
+        // 네이버 링크 자동 파싱
+        async function fetchFromNaverLinkModal() {
+            const link = document.getElementById('naverLinkInput').value.trim();
             if (!link) {
-                alert('네이버 지도 공유 링크를 먼저 붙여넣어 주세요!');
+                alert('네이버 지도 공유 링크를 입력해 주세요!');
                 return;
             }
 
             try {
-                const response = await fetch(`/api/parse?url=${encodeURIComponent(link)}`);
-                const data = await response.json();
+                const res = await fetch(`/api/parse?url=${encodeURIComponent(link)}`);
+                const data = await res.json();
 
                 if (!data.success) {
                     alert(data.message);
                     return;
                 }
 
-                document.getElementById('placeName').value = data.name || '';
-                document.getElementById('placeAddress').value = data.address || '';
-                fetchedDescription = data.description || '';
+                document.getElementById('modalPlaceName').value = data.name || '';
+                document.getElementById('modalPlaceAddress').value = data.address || '';
+                fetchedDescModal = data.description || '';
 
                 if (!data.address) {
-                    alert('가게 이름은 불러왔지만 주소가 자동 추출되지 않았습니다. 주소를 직접 입력해 주세요.');
+                    alert('가게 이름은 불러왔으나 주소가 누락되었습니다. 주소를 직접 입력해 주세요.');
                 }
-            } catch (error) {
-                alert('서버와 통신할 수 없습니다. 로컬 터미널에서 python server.py가 실행 중인지 확인해 주세요.');
+            } catch (e) {
+                alert('서버와 통신할 수 없습니다.');
             }
         }
 
-        // ==========================================
-        // 🛡️ 4. 스키마 자동 적응형 Supabase INSERT 헬퍼
-        // (테이블에 없는 컬럼 에러 발생 시 자동 제외 후 즉시 재시도)
-        // ==========================================
-        async function insertWithSchemaFallback(table, initialPayload) {
-            if (!supabaseClient) return { data: null, error: new Error('Supabase 미연결') };
-
-            let payload = { ...initialPayload };
-            for (let attempt = 0; attempt < 6; attempt++) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from(table)
-                        .insert([payload])
-                        .select();
-
-                    if (!error) {
-                        return { data, error: null };
-                    }
-
-                    // 스키마 캐시 미발견 컬럼 자동 감지 ("Could not find the 'xyz' column of '...' in the schema cache")
-                    const colMatch = error.message && error.message.match(/Could not find the '([^']+)' column/i);
-                    if (colMatch && colMatch[1]) {
-                        const missingCol = colMatch[1];
-                        console.warn(`[스키마 자동 보정] '${table}' 테이블에 '${missingCol}' 컬럼이 없어 제외 후 자동 재시도합니다.`);
-                        delete payload[missingCol];
-                        continue;
-                    }
-
-                    return { data: null, error };
-                } catch (e) {
-                    return { data: null, error: e };
-                }
-            }
-            return { data: null, error: new Error('재시도 한도 초과') };
-        }
-
-        // ==========================================
-        // 💾 5. 맛집 저장 & 핀 꽂기 (Supabase + LocalStorage 이중 영구 보관)
-        // ==========================================
-        function saveRestaurantAndPin() {
-            const name = document.getElementById('placeName').value.trim();
-            const address = document.getElementById('placeAddress').value.trim();
-            const category = document.getElementById('placeCategory').value;
-            const menu = document.getElementById('menuInfo').value.trim();
-            const link = document.getElementById('naverLink').value.trim();
+        // 모달에서 맛집 저장
+        function saveRestaurantFromModal() {
+            const name = document.getElementById('modalPlaceName').value.trim();
+            const address = document.getElementById('modalPlaceAddress').value.trim();
+            const category = document.getElementById('modalPlaceCategory').value;
+            const menu = document.getElementById('modalMenuInfo').value.trim();
+            const link = document.getElementById('naverLinkInput').value.trim();
 
             if (!name || !address) {
-                alert('맛집 이름과 도로명 주소는 필수 입력값입니다!');
+                alert('가게 이름과 주소는 필수입니다!');
                 return;
             }
 
             naver.maps.Service.geocode({ query: address }, async function(status, response) {
                 if (status !== naver.maps.Service.Status.OK || response.v2.addresses.length === 0) {
-                    alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소를 정확히 입력해 주세요.');
+                    alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소를 정확하게 입력해 주세요.');
                     return;
                 }
 
@@ -377,7 +1003,7 @@
                 const lat = parseFloat(result.y);
                 const lng = parseFloat(result.x);
 
-                const newRestaurant = {
+                const itemData = {
                     name: name,
                     address: address,
                     category: category,
@@ -389,339 +1015,55 @@
 
                 let savedId = null;
 
-                // 1) Supabase INSERT 시도 (스키마 자동 적응)
+                // 1) Supabase 저장 (스키마 자동 적응)
                 if (supabaseClient) {
-                    const res = await insertWithSchemaFallback('restaurants', newRestaurant);
-                    if (res.data && res.data.length > 0) {
-                        savedId = res.data[0].id;
-                        console.log('Supabase 저장 성공:', savedId);
-                    } else if (res.error) {
-                        console.warn('Supabase 저장 경고 (로컬 스토리지에 영구 보관):', res.error.message);
-                    }
-                }
-
-                // 2) 로컬 스토리지에 이중 영구 보관 (새로고침해도 영구 유지)
-                newRestaurant.id = savedId || ('loc_' + Date.now());
-                saveRestaurantToLocalStorage(newRestaurant);
-
-                // 3) 지도에 핀 꽂기
-                addRestaurantMarker(newRestaurant, true);
-
-                // 폼 초기화
-                document.getElementById('naverLink').value = '';
-                document.getElementById('placeName').value = '';
-                document.getElementById('placeAddress').value = '';
-                document.getElementById('menuInfo').value = '';
-                fetchedDescription = '';
-                alert(`'${name}' 맛집이 등록되었습니다! 🎉`);
-            });
-        }
-
-        // ==========================================
-        // 🔄 6. 맛집 목록 불러오기 (Supabase + LocalStorage 병합)
-        // ==========================================
-        async function loadRestaurants() {
-            let combined = [];
-            const loadedKeys = new Set();
-
-            // 1) Supabase에서 조회
-            if (supabaseClient) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('restaurants')
-                        .select('*')
-                        .order('id', { ascending: false });
-
-                    if (!error && data && data.length > 0) {
-                        data.forEach(item => {
-                            const key = `${item.name}_${item.address}`;
-                            if (!loadedKeys.has(key)) {
-                                loadedKeys.add(key);
-                                combined.push(item);
+                    try {
+                        let payload = { ...itemData };
+                        for (let t = 0; t < 5; t++) {
+                            const { data, error } = await supabaseClient.from('restaurants').insert([payload]).select();
+                            if (!error && data && data.length > 0) {
+                                savedId = data[0].id;
+                                break;
                             }
-                        });
-                    }
-                } catch (e) {
-                    console.warn('Supabase 로드 건너뜀:', e);
+                            if (error && error.message) {
+                                const m = error.message.match(/Could not find the '([^']+)' column/i);
+                                if (m && m[1]) {
+                                    delete payload[m[1]];
+                                    continue;
+                                }
+                            }
+                            break;
+                        }
+                    } catch (e) {}
                 }
-            }
 
-            // 2) LocalStorage 데이터 병합
-            const localData = getRestaurantsFromLocalStorage();
-            localData.forEach(item => {
-                const key = `${item.name}_${item.address}`;
-                if (!loadedKeys.has(key)) {
-                    loadedKeys.add(key);
-                    combined.push(item);
-                }
-            });
+                itemData.id = savedId || ('loc_' + Date.now());
 
-            // 마커 일괄 생성
-            combined.forEach(item => {
-                addRestaurantMarker(item, false);
-            });
-        }
-
-        // ==========================================
-        // 📍 7. 지도 마커 및 인포윈도우 생성
-        // ==========================================
-        function addRestaurantMarker(item, shouldOpen = false) {
-            const coords = new naver.maps.LatLng(item.lat, item.lng);
-
-            const marker = new naver.maps.Marker({
-                position: coords,
-                map: map,
-                title: item.name
-            });
-
-            const infoWindow = new naver.maps.InfoWindow({
-                content: generateInfoWindowHtml(item)
-            });
-
-            const markerObj = {
-                id: item.id,
-                category: item.category || '기타',
-                marker: marker,
-                infoWindow: infoWindow,
-                data: item
-            };
-            markersList.push(markerObj);
-
-            naver.maps.Event.addListener(marker, 'click', function() {
-                if (currentOpenInfoWindow && currentOpenInfoWindow.getMap()) {
-                    currentOpenInfoWindow.close();
-                }
-                infoWindow.open(map, marker);
-                currentOpenInfoWindow = infoWindow;
-                map.panTo(coords);
-                loadReviewsForRestaurant(item.id);
-            });
-
-            if (shouldOpen) {
-                if (currentOpenInfoWindow && currentOpenInfoWindow.getMap()) {
-                    currentOpenInfoWindow.close();
-                }
-                infoWindow.open(map, marker);
-                currentOpenInfoWindow = infoWindow;
-                map.panTo(coords);
-                loadReviewsForRestaurant(item.id);
-            }
-        }
-
-        // ==========================================
-        // 🪟 8. 인포윈도우 HTML 템플릿
-        // ==========================================
-        function generateInfoWindowHtml(item) {
-            const linkHtml = item.naver_link 
-                ? `<div style="margin-top:6px;"><a href="${item.naver_link}" target="_blank" style="color:#03C75A; font-weight:bold; text-decoration:none; font-size:12px;">👉 네이버 지도 바로가기</a></div>` 
-                : '';
-            const menuHtml = item.menu 
-                ? `<div class="meta-row">🍴 <b>추천:</b> ${item.menu}</div>` 
-                : '';
-
-            return `
-                <div class="info-card" id="card_${item.id}">
-                    <h4>
-                        <span>${item.name}</span>
-                        <span class="category-badge">${item.category || '기타'}</span>
-                    </h4>
-                    <div class="meta-row">📍 ${item.address}</div>
-                    ${menuHtml}
-                    ${linkHtml}
-
-                    <div class="rating-summary" id="rating_summary_${item.id}">
-                        ⭐ 리뷰 로딩 중...
-                    </div>
-
-                    <hr>
-
-                    <div style="font-weight:bold; font-size:12px; margin-bottom:6px;">💬 방문자 리뷰 & 별점</div>
-                    <div class="reviews-container" id="reviews_list_${item.id}">
-                        <div style="color:#888; font-size:11px; text-align:center; padding:10px;">리뷰를 불러오는 중입니다...</div>
-                    </div>
-
-                    <!-- 리뷰 작성 폼 -->
-                    <div class="review-form">
-                        <div class="form-row">
-                            <select id="rev_rating_${item.id}">
-                                <option value="5">⭐⭐⭐⭐⭐ 5점</option>
-                                <option value="4">⭐⭐⭐⭐ 4점</option>
-                                <option value="3">⭐⭐⭐ 3점</option>
-                                <option value="2">⭐⭐ 2점</option>
-                                <option value="1">⭐ 1점</option>
-                            </select>
-                            <input type="text" id="rev_comment_${item.id}" placeholder="한줄평 (예: 최고예요!)" onkeydown="if(event.key==='Enter') submitReview('${item.id}')">
-                        </div>
-                        <button type="button" onclick="submitReview('${item.id}')">별점 및 리뷰 등록</button>
-                    </div>
-                </div>
-            `;
-        }
-
-        // ==========================================
-        // ⭐ 9. 리뷰 로드 (Supabase + LocalStorage)
-        // ==========================================
-        async function loadReviewsForRestaurant(restaurantId) {
-            const listEl = document.getElementById(`reviews_list_${restaurantId}`);
-            const summaryEl = document.getElementById(`rating_summary_${restaurantId}`);
-            if (!listEl) return;
-
-            let reviews = [];
-
-            // 1) Supabase에서 리뷰 조회
-            if (supabaseClient && typeof restaurantId === 'number') {
+                // 2) LocalStorage 백업
                 try {
-                    const { data, error } = await supabaseClient
-                        .from('reviews')
-                        .select('*')
-                        .eq('restaurant_id', restaurantId)
-                        .order('created_at', { ascending: false });
+                    const locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                    locals.unshift(itemData);
+                    localStorage.setItem('matitkhuman_restaurants', JSON.stringify(locals));
+                } catch (e) {}
 
-                    if (!error && data) {
-                        reviews = reviews.concat(data);
-                    }
-                } catch (e) {
-                    console.warn('Supabase 리뷰 로드 건너뜀:', e);
-                }
-            }
+                // 메모리 목록 추가
+                allRestaurantsData.unshift(itemData);
 
-            // 2) LocalStorage 리뷰 병합
-            const localReviews = getReviewsFromLocalStorage(restaurantId);
-            reviews = reviews.concat(localReviews);
+                // 폼 초기화 및 모달 닫기
+                document.getElementById('naverLinkInput').value = '';
+                document.getElementById('modalPlaceName').value = '';
+                document.getElementById('modalPlaceAddress').value = '';
+                document.getElementById('modalMenuInfo').value = '';
+                closeAddModal();
 
-            if (reviews.length === 0) {
-                listEl.innerHTML = '<div style="color:#999; font-size:11px; text-align:center; padding:12px;">아직 작성된 리뷰가 없습니다.<br>첫 번째 리뷰를 남겨보세요! ✨</div>';
-                if (summaryEl) summaryEl.innerHTML = '⭐ 첫 리뷰를 남겨주세요!';
-                return;
-            }
-
-            // 평균 평점 계산
-            const sum = reviews.reduce((acc, cur) => acc + (Number(cur.rating) || 0), 0);
-            const avg = (sum / reviews.length).toFixed(1);
-            if (summaryEl) {
-                summaryEl.innerHTML = `⭐ <b>${avg}</b> / 5.0 (${reviews.length}개 리뷰)`;
-            }
-
-            // 리뷰 목록 표시
-            let html = '';
-            reviews.forEach(rev => {
-                const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(rev.rating) || 5)));
-                const dateStr = rev.created_at ? new Date(rev.created_at).toLocaleDateString('ko-KR') : '';
-                html += `
-                    <div class="review-item">
-                        <div class="review-top">
-                            <span>${stars} (${rev.rating}점)</span>
-                            <span class="review-date">${dateStr}</span>
-                        </div>
-                        <div class="review-comment">${escapeHtml(rev.comment || '')}</div>
-                    </div>
-                `;
+                // 새로 추가된 카테고리로 필터링하여 지도에 핀 표시
+                selectCategory(category);
+                alert(`'${name}' 맛집이 성공적으로 등록되었습니다! 🎉`);
             });
-            listEl.innerHTML = html;
-        }
-
-        // ==========================================
-        // ✍️ 10. 리뷰 등록 (Supabase + LocalStorage)
-        // ==========================================
-        async function submitReview(restaurantId) {
-            const ratingSelect = document.getElementById(`rev_rating_${restaurantId}`);
-            const commentInput = document.getElementById(`rev_comment_${restaurantId}`);
-
-            const rating = parseInt(ratingSelect.value, 10);
-            const comment = commentInput.value.trim();
-
-            if (!comment) {
-                alert('리뷰 한줄평을 입력해 주세요!');
-                commentInput.focus();
-                return;
-            }
-
-            const newReview = {
-                restaurant_id: typeof restaurantId === 'number' ? restaurantId : null,
-                rating: rating,
-                comment: comment,
-                created_at: new Date().toISOString()
-            };
-
-            // 1) Supabase INSERT 시도 (스키마 자동 적응)
-            if (supabaseClient && typeof restaurantId === 'number') {
-                const res = await insertWithSchemaFallback('reviews', {
-                    restaurant_id: restaurantId,
-                    rating: rating,
-                    comment: comment
-                });
-                if (res.error) {
-                    console.warn('Supabase 리뷰 저장 건너뜀 (로컬 보관):', res.error.message);
-                }
-            }
-
-            // 2) LocalStorage 영구 보관
-            saveReviewToLocalStorage(restaurantId, newReview);
-
-            commentInput.value = '';
-            // 즉시 화면 갱신
-            await loadReviewsForRestaurant(restaurantId);
-        }
-
-        // ==========================================
-        // 🎯 11. 카테고리 필터링
-        // ==========================================
-        function filterCategory(category) {
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                if (btn.innerText.includes(category) || (category === '전체' && btn.innerText.includes('전체'))) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
-
-            markersList.forEach(item => {
-                if (category === '전체' || item.category === category) {
-                    item.marker.setMap(map);
-                } else {
-                    item.marker.setMap(null);
-                    if (currentOpenInfoWindow === item.infoWindow) {
-                        item.infoWindow.close();
-                    }
-                }
-            });
-        }
-
-        // ==========================================
-        // 🗄️ 12. LocalStorage 유틸리티 (데이터 영구 유지 보장)
-        // ==========================================
-        function getRestaurantsFromLocalStorage() {
-            try {
-                return JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
-            } catch (e) { return []; }
-        }
-
-        function saveRestaurantToLocalStorage(item) {
-            try {
-                const list = getRestaurantsFromLocalStorage();
-                list.unshift(item);
-                localStorage.setItem('matitkhuman_restaurants', JSON.stringify(list));
-            } catch (e) {}
-        }
-
-        function getReviewsFromLocalStorage(restaurantId) {
-            try {
-                const all = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
-                return all[restaurantId] || [];
-            } catch (e) { return []; }
-        }
-
-        function saveReviewToLocalStorage(restaurantId, review) {
-            try {
-                const all = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
-                if (!all[restaurantId]) all[restaurantId] = [];
-                all[restaurantId].unshift(review);
-                localStorage.setItem('matitkhuman_reviews', JSON.stringify(all));
-            } catch (e) {}
         }
 
         function escapeHtml(str) {
-            return str
+            return String(str)
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
                 .replace(/>/g, "&gt;")

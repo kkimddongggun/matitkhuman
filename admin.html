@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>맛있쿠만 관리자 페이지</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        .header {
+            background-color: #9E1B32;
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header h1 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+        .header a {
+            color: white;
+            text-decoration: none;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .header a:hover { background: rgba(255,255,255,0.3); }
+
+        .container {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .toolbar {
+            background: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+        .stats {
+            font-size: 14px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .table-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+        th {
+            background: #f1f3f5;
+            color: #495057;
+            padding: 14px 16px;
+            font-weight: 600;
+            border-bottom: 1px solid #e9ecef;
+        }
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid #f1f3f5;
+            vertical-align: middle;
+        }
+        tr:hover { background-color: #fafbfc; }
+
+        .category-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            background: #e9ecef;
+            color: #495057;
+        }
+        .btn-group { display: flex; gap: 6px; }
+        .btn-edit {
+            background: #4dabf7;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-edit:hover { background: #339af0; }
+        .btn-delete {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-delete:hover { background: #fa5252; }
+
+        /* 수정 모달 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 14px;
+            width: 440px;
+            max-width: 90vw;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        .modal-content h3 { margin: 0 0 16px 0; color: #9E1B32; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; font-weight: 600; }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 20px;
+        }
+        .btn-cancel {
+            background: #e9ecef;
+            color: #495057;
+            border: none;
+            padding: 9px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-save {
+            background: #9E1B32;
+            color: white;
+            border: none;
+            padding: 9px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-save:hover { background: #7d1527; }
+
+        /* 인증 모달 */
+        #authOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+        .auth-card {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            width: 360px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .auth-card h2 { margin: 0 0 8px 0; color: #9E1B32; font-size: 20px; }
+        .auth-card p { font-size: 13px; color: #666; margin-bottom: 20px; }
+        .auth-card input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 14px;
+            outline: none;
+        }
+        .auth-card button {
+            width: 100%;
+            padding: 12px;
+            background: #9E1B32;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- 관리자 인증 팝업 -->
+    <div id="authOverlay">
+        <div class="auth-card">
+            <h2>🔒 관리자 인증</h2>
+            <p>맛집 관리 모드에 접속하려면 관리자 비밀번호를 입력해주세요.<br><small style="color:#999;">(기본 비밀번호: khu1234)</small></p>
+            <input type="password" id="adminPw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter') checkAdminAuth()">
+            <button onclick="checkAdminAuth()">접속하기</button>
+        </div>
+    </div>
+
+    <!-- 헤더 -->
+    <div class="header">
+        <h1>⚙️ 맛있쿠만 맛집 관리자 페이지</h1>
+        <a href="index.html">🗺️ 지도로 돌아가기</a>
+    </div>
+
+    <div class="container">
+        <!-- 툴바 -->
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="가게 이름, 카테고리, 대표 메뉴로 검색..." oninput="renderTable()">
+            </div>
+            <div class="stats" id="statsCount">총 등록된 맛집: 0개</div>
+        </div>
+
+        <!-- 맛집 목록 테이블 -->
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">ID</th>
+                        <th style="width: 100px;">카테고리</th>
+                        <th>가게 이름</th>
+                        <th>대표 메뉴 / 안내</th>
+                        <th>주소</th>
+                        <th style="width: 130px; text-align: center;">관리</th>
+                    </tr>
+                </thead>
+                <tbody id="restaurantTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: #888; padding: 30px;">
+                            데이터를 불러오는 중입니다...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 수정 모달 -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-content">
+            <h3>✏️ 맛집 정보 수정</h3>
+            <input type="hidden" id="editId">
+            <div class="form-group">
+                <label>가게 이름</label>
+                <input type="text" id="editName">
+            </div>
+            <div class="form-group">
+                <label>카테고리</label>
+                <select id="editCategory">
+                    <option value="한식">🍚 한식</option>
+                    <option value="중식">🥟 중식</option>
+                    <option value="일식">🍣 일식</option>
+                    <option value="양식">🍝 양식</option>
+                    <option value="카페/디저트">☕ 카페 / 디저트</option>
+                    <option value="주점/술집">🍺 주점 / 술집</option>
+                    <option value="패스트푸드">🍔 패스트푸드 / 분식</option>
+                    <option value="기타">🍴 기타</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>대표 메뉴 / 팁</label>
+                <input type="text" id="editMenu">
+            </div>
+            <div class="form-group">
+                <label>도로명 주소</label>
+                <input type="text" id="editAddress">
+            </div>
+            <div class="form-group">
+                <label>네이버 링크</label>
+                <input type="text" id="editLink">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeEditModal()">취소</button>
+                <button class="btn-save" onclick="saveEdit()">변경 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://nvcpdziimebnrpzajbdf.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_2bBWoHmzoDGlo9KIXMBjLw_nOl2M7mx';
+        let supabaseClient = null;
+        if (window.supabase) {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+
+        let allRestaurants = [];
+
+        // 관리자 인증 (기본 비번: khu1234)
+        function checkAdminAuth() {
+            const pw = document.getElementById('adminPw').value.trim();
+            if (pw === 'khu1234' || pw === 'matitkhuman') {
+                sessionStorage.setItem('matit_admin_auth', 'true');
+                document.getElementById('authOverlay').style.display = 'none';
+                loadAllRestaurants();
+            } else {
+                alert('비밀번호가 올바르지 않습니다.');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (sessionStorage.getItem('matit_admin_auth') === 'true') {
+                document.getElementById('authOverlay').style.display = 'none';
+                loadAllRestaurants();
+            }
+        });
+
+        // 데이터 불러오기 (Supabase + LocalStorage)
+        async function loadAllRestaurants() {
+            let list = [];
+            const keySet = new Set();
+
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('restaurants')
+                        .select('*')
+                        .order('id', { ascending: false });
+
+                    if (!error && data) {
+                        data.forEach(item => {
+                            keySet.add(`${item.name}_${item.address}`);
+                            list.push(item);
+                        });
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+            }
+
+            // LocalStorage 병합
+            try {
+                const locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                locals.forEach(item => {
+                    const key = `${item.name}_${item.address}`;
+                    if (!keySet.has(key)) {
+                        keySet.add(key);
+                        list.push(item);
+                    }
+                });
+            } catch (e) {}
+
+            allRestaurants = list;
+            renderTable();
+        }
+
+        // 테이블 렌더링
+        function renderTable() {
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            const tbody = document.getElementById('restaurantTableBody');
+            const countEl = document.getElementById('statsCount');
+
+            const filtered = allRestaurants.filter(r => {
+                if (!query) return true;
+                const name = (r.name || '').toLowerCase();
+                const cat = (r.category || '').toLowerCase();
+                const menu = (r.menu || '').toLowerCase();
+                const addr = (r.address || '').toLowerCase();
+                return name.includes(query) || cat.includes(query) || menu.includes(query) || addr.includes(query);
+            });
+
+            countEl.innerText = `총 등록된 맛집: ${filtered.length}개`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #888; padding: 30px;">등록된 맛집이 없거나 검색 결과가 없습니다.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(item => {
+                html += `
+                    <tr>
+                        <td><small style="color:#888;">${item.id}</small></td>
+                        <td><span class="category-badge">${item.category || '기타'}</span></td>
+                        <td><strong>${escapeHtml(item.name || '')}</strong></td>
+                        <td>${escapeHtml(item.menu || '-')}</td>
+                        <td style="color:#666; font-size:13px;">${escapeHtml(item.address || '')}</td>
+                        <td style="text-align: center;">
+                            <div class="btn-group" style="justify-content: center;">
+                                <button class="btn-edit" onclick="openEditModal('${item.id}')">수정</button>
+                                <button class="btn-delete" onclick="deleteRestaurant('${item.id}', '${escapeHtml(item.name || '')}')">삭제</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // 맛집 삭제
+        async function deleteRestaurant(id, name) {
+            if (!confirm(`'${name}' 맛집을 정말 삭제하시겠습니까?\n삭제 후에는 지도와 목록에서 제거됩니다.`)) {
+                return;
+            }
+
+            // 1) Supabase에서 삭제 시도
+            if (supabaseClient && !String(id).startsWith('loc_')) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('restaurants')
+                        .delete()
+                        .eq('id', id);
+
+                    if (error) {
+                        console.warn('Supabase 삭제 에러:', error);
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+            }
+
+            // 2) LocalStorage에서도 삭제
+            try {
+                let locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                locals = locals.filter(item => String(item.id) !== String(id) && item.name !== name);
+                localStorage.setItem('matitkhuman_restaurants', JSON.stringify(locals));
+            } catch (e) {}
+
+            alert(`'${name}' 맛집이 삭제되었습니다.`);
+            allRestaurants = allRestaurants.filter(item => String(item.id) !== String(id));
+            renderTable();
+        }
+
+        // 수정 모달 열기
+        function openEditModal(id) {
+            const item = allRestaurants.find(r => String(r.id) === String(id));
+            if (!item) return;
+
+            document.getElementById('editId').value = item.id;
+            document.getElementById('editName').value = item.name || '';
+            document.getElementById('editCategory').value = item.category || '기타';
+            document.getElementById('editMenu').value = item.menu || '';
+            document.getElementById('editAddress').value = item.address || '';
+            document.getElementById('editLink').value = item.naver_link || '';
+
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        // 수정 저장
+        async function saveEdit() {
+            const id = document.getElementById('editId').value;
+            const name = document.getElementById('editName').value.trim();
+            const category = document.getElementById('editCategory').value;
+            const menu = document.getElementById('editMenu').value.trim();
+            const address = document.getElementById('editAddress').value.trim();
+            const link = document.getElementById('editLink').value.trim();
+
+            if (!name || !address) {
+                alert('가게 이름과 주소는 필수입니다!');
+                return;
+            }
+
+            const updates = {
+                name: name,
+                category: category,
+                menu: menu,
+                address: address,
+                naver_link: link
+            };
+
+            // 1) Supabase 업데이트
+            if (supabaseClient && !String(id).startsWith('loc_')) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('restaurants')
+                        .update(updates)
+                        .eq('id', id);
+
+                    if (error) {
+                        console.warn('Supabase 업데이트 에러:', error);
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+            }
+
+            // 2) LocalStorage 업데이트
+            try {
+                let locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                const idx = locals.findIndex(item => String(item.id) === String(id));
+                if (idx !== -1) {
+                    locals[idx] = { ...locals[idx], ...updates };
+                    localStorage.setItem('matitkhuman_restaurants', JSON.stringify(locals));
+                }
+            } catch (e) {}
+
+            // 메모리 목록 갱신
+            const target = allRestaurants.find(r => String(r.id) === String(id));
+            if (target) {
+                Object.assign(target, updates);
+            }
+
+            closeEditModal();
+            renderTable();
+            alert('맛집 정보가 수정되었습니다! 🎉');
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
