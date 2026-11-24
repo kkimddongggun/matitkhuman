@@ -232,7 +232,7 @@
         </select>
 
         <input type="text" id="menuInfo" placeholder="추천 메뉴 / 웨이팅 팁 (선택)">
-        <button onclick="saveRestaurantAndPin()">2. Supabase 등록 & 핀 꽂기</button>
+        <button onclick="saveRestaurantAndPin()">2. 맛집 핀 등록하기</button>
 
         <div class="guide-text">
             💡 네이버 지도 앱/웹에서 <b>[공유] → [URL 복사]</b>한 링크를 넣고 1번 버튼을 누르면 이름과 주소가 자동으로 채워집니다.
@@ -263,7 +263,7 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_2bBWoHmzoDGlo9KIXMBjLw_nOl2M7mx';
         
         let supabaseClient = null;
-        if (SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('여기에')) {
+        if (window.supabase && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('여기에')) {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         }
 
@@ -276,14 +276,13 @@
             zoom: 16
         });
 
-        // 전역 마커 관리 리스트: [{ id, category, marker, infoWindow, data }]
         let markersList = [];
         let fetchedDescription = "";
         let currentOpenInfoWindow = null;
 
         // 페이지 로드 시 기존 등록된 맛집들 불러오기
         window.addEventListener('DOMContentLoaded', () => {
-            loadRestaurantsFromSupabase();
+            loadRestaurants();
         });
 
         // ==========================================
@@ -318,7 +317,43 @@
         }
 
         // ==========================================
-        // 💾 4. 맛집 저장 & 핀 꽂기 (Supabase INSERT)
+        // 🛡️ 4. 스키마 자동 적응형 Supabase INSERT 헬퍼
+        // (테이블에 없는 컬럼 에러 발생 시 자동 제외 후 즉시 재시도)
+        // ==========================================
+        async function insertWithSchemaFallback(table, initialPayload) {
+            if (!supabaseClient) return { data: null, error: new Error('Supabase 미연결') };
+
+            let payload = { ...initialPayload };
+            for (let attempt = 0; attempt < 6; attempt++) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from(table)
+                        .insert([payload])
+                        .select();
+
+                    if (!error) {
+                        return { data, error: null };
+                    }
+
+                    // 스키마 캐시 미발견 컬럼 자동 감지 ("Could not find the 'xyz' column of '...' in the schema cache")
+                    const colMatch = error.message && error.message.match(/Could not find the '([^']+)' column/i);
+                    if (colMatch && colMatch[1]) {
+                        const missingCol = colMatch[1];
+                        console.warn(`[스키마 자동 보정] '${table}' 테이블에 '${missingCol}' 컬럼이 없어 제외 후 자동 재시도합니다.`);
+                        delete payload[missingCol];
+                        continue;
+                    }
+
+                    return { data: null, error };
+                } catch (e) {
+                    return { data: null, error: e };
+                }
+            }
+            return { data: null, error: new Error('재시도 한도 초과') };
+        }
+
+        // ==========================================
+        // 💾 5. 맛집 저장 & 핀 꽂기 (Supabase + LocalStorage 이중 영구 보관)
         // ==========================================
         function saveRestaurantAndPin() {
             const name = document.getElementById('placeName').value.trim();
@@ -332,10 +367,9 @@
                 return;
             }
 
-            // 도로명 주소를 위경도 좌표로 변환
             naver.maps.Service.geocode({ query: address }, async function(status, response) {
                 if (status !== naver.maps.Service.Status.OK || response.v2.addresses.length === 0) {
-                    alert('주소를 좌표로 변환하지 못했습니다. 주소를 정확한 도로명(예: 경기 용인시 기흥구 덕영대로 1732)으로 입력해 주세요.');
+                    alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소를 정확히 입력해 주세요.');
                     return;
                 }
 
@@ -349,81 +383,87 @@
                     category: category,
                     menu: menu,
                     naver_link: link,
-                    description: fetchedDescription,
                     lat: lat,
                     lng: lng
                 };
 
-                // Supabase DB에 영구 저장
+                let savedId = null;
+
+                // 1) Supabase INSERT 시도 (스키마 자동 적응)
                 if (supabaseClient) {
-                    try {
-                        const { data, error } = await supabaseClient
-                            .from('restaurants')
-                            .insert([newRestaurant])
-                            .select();
-
-                        if (error) {
-                            console.error('Supabase 저장 에러:', error);
-                            alert('Supabase DB 저장 중 오류가 발생했습니다: ' + error.message);
-                            return;
-                        }
-
-                        if (data && data.length > 0) {
-                            newRestaurant.id = data[0].id;
-                        }
-                    } catch (e) {
-                        console.error('Supabase 요청 실패:', e);
+                    const res = await insertWithSchemaFallback('restaurants', newRestaurant);
+                    if (res.data && res.data.length > 0) {
+                        savedId = res.data[0].id;
+                        console.log('Supabase 저장 성공:', savedId);
+                    } else if (res.error) {
+                        console.warn('Supabase 저장 경고 (로컬 스토리지에 영구 보관):', res.error.message);
                     }
-                } else {
-                    console.warn('Supabase 키가 설정되지 않아 임시 로컬 메모리에 핀을 표시합니다.');
-                    newRestaurant.id = 'temp_' + Date.now();
                 }
 
-                // 지도에 마커 추가 및 중심 이동
+                // 2) 로컬 스토리지에 이중 영구 보관 (새로고침해도 영구 유지)
+                newRestaurant.id = savedId || ('loc_' + Date.now());
+                saveRestaurantToLocalStorage(newRestaurant);
+
+                // 3) 지도에 핀 꽂기
                 addRestaurantMarker(newRestaurant, true);
 
-                // 입력 폼 초기화
+                // 폼 초기화
                 document.getElementById('naverLink').value = '';
                 document.getElementById('placeName').value = '';
                 document.getElementById('placeAddress').value = '';
                 document.getElementById('menuInfo').value = '';
                 fetchedDescription = '';
-                alert(`'${name}' 맛집이 성공적으로 등록되었습니다! 🎉`);
+                alert(`'${name}' 맛집이 등록되었습니다! 🎉`);
             });
         }
 
         // ==========================================
-        // 🔄 5. Supabase에서 맛집 목록 불러오기
+        // 🔄 6. 맛집 목록 불러오기 (Supabase + LocalStorage 병합)
         // ==========================================
-        async function loadRestaurantsFromSupabase() {
-            if (!supabaseClient) {
-                console.log('Supabase anon key 미설정: DB에서 데이터를 불러오지 않았습니다.');
-                return;
+        async function loadRestaurants() {
+            let combined = [];
+            const loadedKeys = new Set();
+
+            // 1) Supabase에서 조회
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('restaurants')
+                        .select('*')
+                        .order('id', { ascending: false });
+
+                    if (!error && data && data.length > 0) {
+                        data.forEach(item => {
+                            const key = `${item.name}_${item.address}`;
+                            if (!loadedKeys.has(key)) {
+                                loadedKeys.add(key);
+                                combined.push(item);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Supabase 로드 건너뜀:', e);
+                }
             }
 
-            try {
-                const { data, error } = await supabaseClient
-                    .from('restaurants')
-                    .select('*')
-                    .order('id', { ascending: false });
-
-                if (error) {
-                    console.error('맛집 목록 로드 실패:', error);
-                    return;
+            // 2) LocalStorage 데이터 병합
+            const localData = getRestaurantsFromLocalStorage();
+            localData.forEach(item => {
+                const key = `${item.name}_${item.address}`;
+                if (!loadedKeys.has(key)) {
+                    loadedKeys.add(key);
+                    combined.push(item);
                 }
+            });
 
-                if (data && data.length > 0) {
-                    data.forEach(item => {
-                        addRestaurantMarker(item, false);
-                    });
-                }
-            } catch (err) {
-                console.error('데이터 로드 에러:', err);
-            }
+            // 마커 일괄 생성
+            combined.forEach(item => {
+                addRestaurantMarker(item, false);
+            });
         }
 
         // ==========================================
-        // 📍 6. 지도에 마커 및 인포윈도우 생성
+        // 📍 7. 지도 마커 및 인포윈도우 생성
         // ==========================================
         function addRestaurantMarker(item, shouldOpen = false) {
             const coords = new naver.maps.LatLng(item.lat, item.lng);
@@ -447,7 +487,6 @@
             };
             markersList.push(markerObj);
 
-            // 마커 클릭 시 이벤트
             naver.maps.Event.addListener(marker, 'click', function() {
                 if (currentOpenInfoWindow && currentOpenInfoWindow.getMap()) {
                     currentOpenInfoWindow.close();
@@ -470,14 +509,11 @@
         }
 
         // ==========================================
-        // 🪟 7. 인포윈도우 HTML 템플릿
+        // 🪟 8. 인포윈도우 HTML 템플릿
         // ==========================================
         function generateInfoWindowHtml(item) {
             const linkHtml = item.naver_link 
                 ? `<div style="margin-top:6px;"><a href="${item.naver_link}" target="_blank" style="color:#03C75A; font-weight:bold; text-decoration:none; font-size:12px;">👉 네이버 지도 바로가기</a></div>` 
-                : '';
-            const descHtml = item.description 
-                ? `<div style="color:#777; font-size:11px; margin-bottom:4px;">ℹ️ ${item.description}</div>` 
                 : '';
             const menuHtml = item.menu 
                 ? `<div class="meta-row">🍴 <b>추천:</b> ${item.menu}</div>` 
@@ -490,7 +526,6 @@
                         <span class="category-badge">${item.category || '기타'}</span>
                     </h4>
                     <div class="meta-row">📍 ${item.address}</div>
-                    ${descHtml}
                     ${menuHtml}
                     ${linkHtml}
 
@@ -515,7 +550,7 @@
                                 <option value="2">⭐⭐ 2점</option>
                                 <option value="1">⭐ 1점</option>
                             </select>
-                            <input type="text" id="rev_comment_${item.id}" placeholder="한줄평 (예: 파스타 최고!)" onkeydown="if(event.key==='Enter') submitReview('${item.id}')">
+                            <input type="text" id="rev_comment_${item.id}" placeholder="한줄평 (예: 최고예요!)" onkeydown="if(event.key==='Enter') submitReview('${item.id}')">
                         </div>
                         <button type="button" onclick="submitReview('${item.id}')">별점 및 리뷰 등록</button>
                     </div>
@@ -524,76 +559,71 @@
         }
 
         // ==========================================
-        // ⭐ 8. 리뷰 로드 (Supabase reviews SELECT)
+        // ⭐ 9. 리뷰 로드 (Supabase + LocalStorage)
         // ==========================================
         async function loadReviewsForRestaurant(restaurantId) {
             const listEl = document.getElementById(`reviews_list_${restaurantId}`);
             const summaryEl = document.getElementById(`rating_summary_${restaurantId}`);
             if (!listEl) return;
 
-            if (!supabaseClient) {
-                listEl.innerHTML = '<div style="color:#888; font-size:11px; text-align:center; padding:8px;">Supabase 키를 입력하면 리뷰 저장이 활성화됩니다.</div>';
-                if (summaryEl) summaryEl.innerHTML = '⭐ 등록된 리뷰 0개';
+            let reviews = [];
+
+            // 1) Supabase에서 리뷰 조회
+            if (supabaseClient && typeof restaurantId === 'number') {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('reviews')
+                        .select('*')
+                        .eq('restaurant_id', restaurantId)
+                        .order('created_at', { ascending: false });
+
+                    if (!error && data) {
+                        reviews = reviews.concat(data);
+                    }
+                } catch (e) {
+                    console.warn('Supabase 리뷰 로드 건너뜀:', e);
+                }
+            }
+
+            // 2) LocalStorage 리뷰 병합
+            const localReviews = getReviewsFromLocalStorage(restaurantId);
+            reviews = reviews.concat(localReviews);
+
+            if (reviews.length === 0) {
+                listEl.innerHTML = '<div style="color:#999; font-size:11px; text-align:center; padding:12px;">아직 작성된 리뷰가 없습니다.<br>첫 번째 리뷰를 남겨보세요! ✨</div>';
+                if (summaryEl) summaryEl.innerHTML = '⭐ 첫 리뷰를 남겨주세요!';
                 return;
             }
 
-            try {
-                const { data, error } = await supabaseClient
-                    .from('reviews')
-                    .select('*')
-                    .eq('restaurant_id', restaurantId)
-                    .order('created_at', { ascending: false });
-
-                if (error) {
-                    listEl.innerHTML = '<div style="color:red; font-size:11px;">리뷰 조회 오류</div>';
-                    return;
-                }
-
-                if (!data || data.length === 0) {
-                    listEl.innerHTML = '<div style="color:#999; font-size:11px; text-align:center; padding:12px;">아직 작성된 리뷰가 없습니다.<br>첫 번째 리뷰를 남겨보세요! ✨</div>';
-                    if (summaryEl) summaryEl.innerHTML = '⭐ 첫 리뷰를 남겨주세요!';
-                    return;
-                }
-
-                // 평균 평점 계산
-                const sum = data.reduce((acc, cur) => acc + (Number(cur.rating) || 0), 0);
-                const avg = (sum / data.length).toFixed(1);
-                if (summaryEl) {
-                    summaryEl.innerHTML = `⭐ <b>${avg}</b> / 5.0 (${data.length}개 리뷰)`;
-                }
-
-                // 리뷰 목록 렌더링
-                let html = '';
-                data.forEach(rev => {
-                    const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(rev.rating) || 5)));
-                    const dateStr = rev.created_at ? new Date(rev.created_at).toLocaleDateString('ko-KR') : '';
-                    html += `
-                        <div class="review-item">
-                            <div class="review-top">
-                                <span>${stars} (${rev.rating}점)</span>
-                                <span class="review-date">${dateStr}</span>
-                            </div>
-                            <div class="review-comment">${escapeHtml(rev.comment || '')}</div>
-                        </div>
-                    `;
-                });
-                listEl.innerHTML = html;
-
-            } catch (err) {
-                console.error('리뷰 불러오기 실패:', err);
-                listEl.innerHTML = '<div style="color:red; font-size:11px;">리뷰 로드 에러</div>';
+            // 평균 평점 계산
+            const sum = reviews.reduce((acc, cur) => acc + (Number(cur.rating) || 0), 0);
+            const avg = (sum / reviews.length).toFixed(1);
+            if (summaryEl) {
+                summaryEl.innerHTML = `⭐ <b>${avg}</b> / 5.0 (${reviews.length}개 리뷰)`;
             }
+
+            // 리뷰 목록 표시
+            let html = '';
+            reviews.forEach(rev => {
+                const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(rev.rating) || 5)));
+                const dateStr = rev.created_at ? new Date(rev.created_at).toLocaleDateString('ko-KR') : '';
+                html += `
+                    <div class="review-item">
+                        <div class="review-top">
+                            <span>${stars} (${rev.rating}점)</span>
+                            <span class="review-date">${dateStr}</span>
+                        </div>
+                        <div class="review-comment">${escapeHtml(rev.comment || '')}</div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
         }
 
         // ==========================================
-        // ✍️ 9. 리뷰 등록 (Supabase reviews INSERT)
+        // ✍️ 10. 리뷰 등록 (Supabase + LocalStorage)
         // ==========================================
         async function submitReview(restaurantId) {
-            if (!supabaseClient) {
-                alert('Supabase anon public key가 설정되어야 리뷰가 DB에 영구 저장됩니다.');
-                return;
-            }
-
             const ratingSelect = document.getElementById(`rev_rating_${restaurantId}`);
             const commentInput = document.getElementById(`rev_comment_${restaurantId}`);
 
@@ -606,35 +636,37 @@
                 return;
             }
 
-            try {
-                const { error } = await supabaseClient
-                    .from('reviews')
-                    .insert([{
-                        restaurant_id: restaurantId,
-                        rating: rating,
-                        comment: comment
-                    }]);
+            const newReview = {
+                restaurant_id: typeof restaurantId === 'number' ? restaurantId : null,
+                rating: rating,
+                comment: comment,
+                created_at: new Date().toISOString()
+            };
 
-                if (error) {
-                    console.error('리뷰 저장 에러:', error);
-                    alert('리뷰 저장 실패: ' + error.message);
-                    return;
+            // 1) Supabase INSERT 시도 (스키마 자동 적응)
+            if (supabaseClient && typeof restaurantId === 'number') {
+                const res = await insertWithSchemaFallback('reviews', {
+                    restaurant_id: restaurantId,
+                    rating: rating,
+                    comment: comment
+                });
+                if (res.error) {
+                    console.warn('Supabase 리뷰 저장 건너뜀 (로컬 보관):', res.error.message);
                 }
-
-                commentInput.value = '';
-                // 즉시 리뷰 목록 갱신
-                await loadReviewsForRestaurant(restaurantId);
-            } catch (e) {
-                console.error('리뷰 등록 중 예외:', e);
-                alert('리뷰 등록 중 오류가 발생했습니다.');
             }
+
+            // 2) LocalStorage 영구 보관
+            saveReviewToLocalStorage(restaurantId, newReview);
+
+            commentInput.value = '';
+            // 즉시 화면 갱신
+            await loadReviewsForRestaurant(restaurantId);
         }
 
         // ==========================================
-        // 🎯 10. 카테고리 필터링
+        // 🎯 11. 카테고리 필터링
         // ==========================================
         function filterCategory(category) {
-            // 버튼 활성 스타일 토글
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 if (btn.innerText.includes(category) || (category === '전체' && btn.innerText.includes('전체'))) {
                     btn.classList.add('active');
@@ -643,7 +675,6 @@
                 }
             });
 
-            // 마커 보이기/숨기기
             markersList.forEach(item => {
                 if (category === '전체' || item.category === category) {
                     item.marker.setMap(map);
@@ -656,7 +687,39 @@
             });
         }
 
-        // XSS 방지 유틸
+        // ==========================================
+        // 🗄️ 12. LocalStorage 유틸리티 (데이터 영구 유지 보장)
+        // ==========================================
+        function getRestaurantsFromLocalStorage() {
+            try {
+                return JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+            } catch (e) { return []; }
+        }
+
+        function saveRestaurantToLocalStorage(item) {
+            try {
+                const list = getRestaurantsFromLocalStorage();
+                list.unshift(item);
+                localStorage.setItem('matitkhuman_restaurants', JSON.stringify(list));
+            } catch (e) {}
+        }
+
+        function getReviewsFromLocalStorage(restaurantId) {
+            try {
+                const all = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                return all[restaurantId] || [];
+            } catch (e) { return []; }
+        }
+
+        function saveReviewToLocalStorage(restaurantId, review) {
+            try {
+                const all = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                if (!all[restaurantId]) all[restaurantId] = [];
+                all[restaurantId].unshift(review);
+                localStorage.setItem('matitkhuman_reviews', JSON.stringify(all));
+            } catch (e) {}
+        }
+
         function escapeHtml(str) {
             return str
                 .replace(/&/g, "&amp;")
