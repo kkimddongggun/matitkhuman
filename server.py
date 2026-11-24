@@ -4,8 +4,9 @@ import urllib.parse
 import json
 import re
 import requests
+import os
 
-PORT = 80
+PORT = int(os.environ.get("PORT", 80))
 
 class MatitkhumanHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
