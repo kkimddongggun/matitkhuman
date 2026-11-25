@@ -669,6 +669,7 @@
         let allMarkers = []; // [{ id, category, marker, data }]
         let selectedRestaurantForDrawer = null;
         let fetchedDescModal = "";
+        let cachedModalCoords = null;
 
         window.addEventListener('DOMContentLoaded', async () => {
             await loadAllRestaurantsData();
@@ -959,6 +960,11 @@
                 return;
             }
 
+            const btn = document.querySelector('.btn-parse');
+            const originalText = btn.innerText;
+            btn.innerText = '⏳ 정보 불러오는 중...';
+            btn.disabled = true;
+
             try {
                 const res = await fetch(`/api/parse?url=${encodeURIComponent(link)}`);
                 const data = await res.json();
@@ -970,13 +976,28 @@
 
                 document.getElementById('modalPlaceName').value = data.name || '';
                 document.getElementById('modalPlaceAddress').value = data.address || '';
-                fetchedDescModal = data.description || '';
+                if (data.category) {
+                    document.getElementById('modalPlaceCategory').value = data.category;
+                }
+
+                // 서버에서 제공한 고정밀 좌표 캐싱
+                if (data.lat && data.lng) {
+                    cachedModalCoords = { lat: data.lat, lng: data.lng };
+                } else {
+                    cachedModalCoords = null;
+                }
 
                 if (!data.address) {
                     alert('가게 이름은 불러왔으나 주소가 누락되었습니다. 주소를 직접 입력해 주세요.');
+                } else {
+                    // 대표 메뉴 입력창으로 자연스럽게 포커스
+                    document.getElementById('modalMenuInfo').focus();
                 }
             } catch (e) {
                 alert('서버와 통신할 수 없습니다.');
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
             }
         }
 
@@ -993,73 +1014,93 @@
                 return;
             }
 
-            naver.maps.Service.geocode({ query: address }, async function(status, response) {
-                if (status !== naver.maps.Service.Status.OK || response.v2.addresses.length === 0) {
-                    alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소를 정확하게 입력해 주세요.');
-                    return;
+            // 1. 서버에서 가져온 정확한 좌표가 있는 경우 바로 저장 진행
+            if (cachedModalCoords && cachedModalCoords.lat && cachedModalCoords.lng) {
+                proceedSaveRestaurant(name, address, category, menu, link, cachedModalCoords.lat, cachedModalCoords.lng);
+                return;
+            }
+
+            // 2. 좌표가 없거나 주소를 직접 수정한 경우 Geocoder 실행
+            // 층수/호수 등 지오코딩 실패 원인이 되는 상세 주소 정제 (예: '청명로 6 1층' -> '청명로 6')
+            const cleanQuery = address.replace(/\s+(?:\d+층|\d+호|[가-힣a-zA-Z0-9]+층|[가-힣a-zA-Z0-9]+호).*$/, '').trim();
+
+            naver.maps.Service.geocode({ query: cleanQuery || address }, function(status, response) {
+                if (status === naver.maps.Service.Status.OK && response.v2.addresses.length > 0) {
+                    const result = response.v2.addresses[0];
+                    proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result.y), parseFloat(result.x));
+                } else {
+                    // 원본 주소로 재시도
+                    naver.maps.Service.geocode({ query: address }, function(status2, response2) {
+                        if (status2 === naver.maps.Service.Status.OK && response2.v2.addresses.length > 0) {
+                            const result2 = response2.v2.addresses[0];
+                            proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result2.y), parseFloat(result2.x));
+                        } else {
+                            alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소(예: 경기 수원시 영통구 청명로 6)로 입력해 주세요.');
+                        }
+                    });
                 }
+            });
+        }
 
-                const result = response.v2.addresses[0];
-                const lat = parseFloat(result.y);
-                const lng = parseFloat(result.x);
+        // 실제 맛집 데이터베이스 저장 및 핀 렌더링
+        async function proceedSaveRestaurant(name, address, category, menu, link, lat, lng) {
+            const itemData = {
+                name: name,
+                address: address,
+                category: category,
+                menu: menu,
+                naver_link: link,
+                lat: lat,
+                lng: lng
+            };
 
-                const itemData = {
-                    name: name,
-                    address: address,
-                    category: category,
-                    menu: menu,
-                    naver_link: link,
-                    lat: lat,
-                    lng: lng
-                };
+            let savedId = null;
 
-                let savedId = null;
-
-                // 1) Supabase 저장 (스키마 자동 적응)
-                if (supabaseClient) {
-                    try {
-                        let payload = { ...itemData };
-                        for (let t = 0; t < 5; t++) {
-                            const { data, error } = await supabaseClient.from('restaurants').insert([payload]).select();
-                            if (!error && data && data.length > 0) {
-                                savedId = data[0].id;
-                                break;
-                            }
-                            if (error && error.message) {
-                                const m = error.message.match(/Could not find the '([^']+)' column/i);
-                                if (m && m[1]) {
-                                    delete payload[m[1]];
-                                    continue;
-                                }
-                            }
+            // 1) Supabase 저장 (스키마 자동 적응)
+            if (supabaseClient) {
+                try {
+                    let payload = { ...itemData };
+                    for (let t = 0; t < 5; t++) {
+                        const { data, error } = await supabaseClient.from('restaurants').insert([payload]).select();
+                        if (!error && data && data.length > 0) {
+                            savedId = data[0].id;
                             break;
                         }
-                    } catch (e) {}
-                }
-
-                itemData.id = savedId || ('loc_' + Date.now());
-
-                // 2) LocalStorage 백업
-                try {
-                    const locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
-                    locals.unshift(itemData);
-                    localStorage.setItem('matitkhuman_restaurants', JSON.stringify(locals));
+                        if (error && error.message) {
+                            const m = error.message.match(/Could not find the '([^']+)' column/i);
+                            if (m && m[1]) {
+                                delete payload[m[1]];
+                                continue;
+                            }
+                        }
+                        break;
+                    }
                 } catch (e) {}
+            }
 
-                // 메모리 목록 추가
-                allRestaurantsData.unshift(itemData);
+            itemData.id = savedId || ('loc_' + Date.now());
 
-                // 폼 초기화 및 모달 닫기
-                document.getElementById('naverLinkInput').value = '';
-                document.getElementById('modalPlaceName').value = '';
-                document.getElementById('modalPlaceAddress').value = '';
-                document.getElementById('modalMenuInfo').value = '';
-                closeAddModal();
+            // 2) LocalStorage 백업
+            try {
+                const locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                locals.unshift(itemData);
+                localStorage.setItem('matitkhuman_restaurants', JSON.stringify(locals));
+            } catch (e) {}
 
-                // 새로 추가된 카테고리로 필터링하여 지도에 핀 표시
-                selectCategory(category);
-                alert(`'${name}' 맛집이 성공적으로 등록되었습니다! 🎉`);
-            });
+            // 메모리 목록 추가
+            allRestaurantsData.unshift(itemData);
+
+            // 폼 초기화 및 모달 닫기
+            document.getElementById('naverLinkInput').value = '';
+            document.getElementById('modalPlaceName').value = '';
+            document.getElementById('modalPlaceAddress').value = '';
+            document.getElementById('modalMenuInfo').value = '';
+            cachedModalCoords = null;
+            closeAddModal();
+
+            // 새로 추가된 카테고리로 필터링하여 지도에 핀 표시
+            selectCategory(category);
+            alert(`'${name}' 맛집이 성공적으로 등록되었습니다! 🎉`);
         }
 
         function escapeHtml(str) {

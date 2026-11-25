@@ -21,10 +21,10 @@ class MatitkhumanHandler(http.server.SimpleHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
         else:
-            # 그 외 일반 접속(http://localhost)은 기존처럼 index.html을 보여줌
             super().do_GET()
 
     def extract_naver_place_info(self, url):
@@ -32,52 +32,82 @@ class MatitkhumanHandler(http.server.SimpleHTTPRequestHandler):
             return {"success": False, "message": "링크를 입력해 주세요."}
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://map.naver.com/"
         }
 
         try:
-            # 1. naver.me 단축 링크를 따라가 최종 URL과 장소 고유 번호(ID) 추출
-            res = requests.get(url, headers=headers, allow_redirects=True, timeout=5)
+            # 1. 단축 링크(naver.me) 또는 전달받은 URL 리다이렉션 추적
+            res = requests.get(url, headers=headers, allow_redirects=True, timeout=10)
             final_url = res.url
 
             match = re.search(r'(?:place|restaurant|cafe)/(\d+)', final_url)
             if not match:
-                return {"success": False, "message": "네이버 지도 장소 링크가 아닌 것 같습니다. 가게 상세 페이지의 공유 링크를 넣어주세요."}
+                match = re.search(r'placeId[=:](\d+)', final_url)
+
+            if not match:
+                return {
+                    "success": False,
+                    "message": "네이버 지도 장소 링크가 아닌 것 같습니다. 가게 상세 페이지의 공유 링크를 넣어주세요."
+                }
 
             place_id = match.group(1)
 
-            # 2. 모바일 네이버 플레이스 페이지에서 가게 이름과 주소 정보 가져오기
-            place_url = f"https://m.place.naver.com/place/{place_id}/home"
-            place_res = requests.get(place_url, headers=headers, timeout=5)
-            html = place_res.text
+            # 2. 네이버 플레이스 공식 Summary API 호출 (429 차단 우회 및 정확한 좌표 제공)
+            api_url = f"https://map.naver.com/p/api/place/summary/{place_id}"
+            api_res = requests.get(api_url, headers=headers, timeout=10)
 
-            # 가게 이름 추출 (og:title 메타 태그)
-            title_match = re.search(r'<meta property="og:title" content="([^"]+)"', html)
-            name = title_match.group(1) if title_match else ""
-            name = re.sub(r'\s*[:|-]\s*네이버.*$', '', name).strip()
+            if api_res.status_code == 200:
+                data = api_res.json()
+                detail = data.get("data", {}).get("placeDetail", {})
 
-            # 요약 정보 추출 (og:description 메타 태그)
-            desc_match = re.search(r'<meta property="og:description" content="([^"]+)"', html)
-            desc = desc_match.group(1).strip() if desc_match else ""
+                name = detail.get("name", "").strip()
 
-            # 도로명 주소 패턴 추출
-            addr_match = re.search(
-                r'((?:서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[가-힣0-9\s\-]+?(?:로|길)\s*\d+(?:-\d+)?)',
-                html
-            )
-            address = addr_match.group(1).strip() if addr_match else ""
+                addr_info = detail.get("address", {})
+                road_addr = addr_info.get("roadAddress", "").strip()
+                jibun_addr = addr_info.get("address", "").strip()
+                address = road_addr or jibun_addr
 
-            return {
-                "success": True,
-                "name": name,
-                "address": address,
-                "description": desc,
-                "final_url": url
-            }
+                category_raw = detail.get("category", {}).get("category", "")
+
+                coord = detail.get("coordinate", {})
+                lat = coord.get("latitude")
+                lng = coord.get("longitude")
+
+                # 음식 종류 카테고리 자동 판별
+                category = "기타"
+                if any(k in category_raw for k in ["한식", "찌개", "국밥", "고기", "삼겹살", "갈비", "냉면", "백반", "구이"]):
+                    category = "한식"
+                elif any(k in category_raw for k in ["일식", "초밥", "라멘", "돈가스", "돈카츠", "우동", "덮밥", "소바", "이자카야"]):
+                    category = "일식"
+                elif any(k in category_raw for k in ["중식", "짜장", "짬뽕", "마라탕", "양꼬치", "딤섬"]):
+                    category = "중식"
+                elif any(k in category_raw for k in ["양식", "이탈리안", "파스타", "피자", "스테이크", "버거"]):
+                    category = "양식"
+                elif any(k in category_raw for k in ["카페", "디저트", "베이커리", "커피", "와플", "빙수", "도넛"]):
+                    category = "카페/디저트"
+                elif any(k in category_raw for k in ["술집", "주점", "호프", "포차", "맥주", "와인", "펍", "바"]):
+                    category = "주점/술집"
+                elif any(k in category_raw for k in ["분식", "떡볶이", "김밥", "패스트푸드", "치킨"]):
+                    category = "패스트푸드"
+
+                return {
+                    "success": True,
+                    "name": name,
+                    "address": address,
+                    "category": category,
+                    "category_raw": category_raw,
+                    "lat": float(lat) if lat else None,
+                    "lng": float(lng) if lng else None,
+                    "final_url": final_url
+                }
+            else:
+                return {"success": False, "message": f"가게 정보를 불러오지 못했습니다 (오류 코드: {api_res.status_code})"}
 
         except Exception as e:
             return {"success": False, "message": f"링크 분석 중 오류 발생: {str(e)}"}
 
-with socketserver.TCPServer(("", PORT), MatitkhumanHandler) as httpd:
-    print(f"맛있쿠만 서버 실행 중: http://localhost:{PORT}")
-    httpd.serve_forever()
+if __name__ == '__main__':
+    with socketserver.TCPServer(("", PORT), MatitkhumanHandler) as httpd:
+        print(f"맛있쿠만 서버 실행 중: http://localhost:{PORT}")
+        httpd.serve_forever()
