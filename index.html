@@ -423,6 +423,103 @@
             cursor: pointer;
         }
 
+        /* 이미지 배너 및 코멘트 카드 */
+        .drawer-image-banner {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 14px;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .drawer-comment-card {
+            background: #fff5f5;
+            border: 1px solid #ffe3e3;
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            color: #9E1B32;
+            line-height: 1.4;
+            display: none;
+        }
+        .image-upload-section {
+            margin-bottom: 10px;
+        }
+        .image-preview-box {
+            position: relative;
+            width: 100%;
+            height: 130px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 8px;
+            display: none;
+            background: #f1f3f5;
+        }
+        .image-preview-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .image-preview-box .btn-remove-img {
+            position: absolute;
+            top: 6px; right: 6px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-upload-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f8f9fa;
+            border: 1px dashed #ccc;
+            color: #495057;
+            padding: 9px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            justify-content: center;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+        .btn-upload-trigger:hover {
+            background: #e9ecef;
+            border-color: #9E1B32;
+            color: #9E1B32;
+        }
+        .review-photo-thumb {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-top: 6px;
+            cursor: pointer;
+            border: 1px solid #e9ecef;
+            display: block;
+            transition: transform 0.2s;
+        }
+        .review-photo-thumb:hover { transform: scale(1.03); }
+        .review-upload-preview {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            background: #e6fcf5;
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 11px;
+            color: #0ca678;
+            font-weight: 600;
+        }
+
         /* ==========================================
            5. 맛집 등록 모달 창 (분리된 등록 팝업)
            ========================================== */
@@ -587,6 +684,14 @@
         </div>
 
         <div class="drawer-body">
+            <!-- 대표 이미지 배너 -->
+            <img id="drawerImageBanner" class="drawer-image-banner" src="" alt="맛집 사진">
+
+            <!-- 등록자 추천 꿀팁 / 코멘트 카드 -->
+            <div class="drawer-comment-card" id="drawerCommentCard">
+                💡 <b>추천 꿀팁:</b> <span id="drawerCommentText"></span>
+            </div>
+
             <div class="rating-banner" id="drawerRatingBanner">
                 ⭐ 평점 로딩 중...
             </div>
@@ -598,6 +703,10 @@
         </div>
 
         <div class="drawer-footer">
+            <div class="review-upload-preview" id="reviewUploadPreview">
+                <span id="reviewUploadFileName">📷 사진 첨부됨</span>
+                <button type="button" style="background:none;border:none;cursor:pointer;color:#fa5252;font-weight:bold;" onclick="clearReviewImage()">✕ 취소</button>
+            </div>
             <div class="review-input-row">
                 <select id="newRevRating">
                     <option value="5">⭐⭐⭐⭐⭐ 5점</option>
@@ -606,7 +715,9 @@
                     <option value="2">⭐⭐ 2점</option>
                     <option value="1">⭐ 1점</option>
                 </select>
-                <input type="text" id="newRevComment" placeholder="한줄평 (예: 최고예요!)" onkeydown="if(event.key==='Enter') submitReviewFromDrawer()">
+                <input type="text" id="newRevComment" placeholder="한줄평 작성..." onkeydown="if(event.key==='Enter') submitReviewFromDrawer()">
+                <button type="button" style="background:#f1f3f5; border:1px solid #ddd; padding:8px 12px; border-radius:8px; font-size:14px; cursor:pointer;" onclick="document.getElementById('reviewImageFile').click()" title="사진 첨부">📷</button>
+                <input type="file" id="reviewImageFile" accept="image/*" style="display:none;" onchange="handleReviewImageSelect(event)">
             </div>
             <button class="btn-submit-review" onclick="submitReviewFromDrawer()">별점 & 리뷰 등록</button>
         </div>
@@ -640,6 +751,21 @@
             </select>
 
             <input type="text" id="modalMenuInfo" placeholder="대표 메뉴 (예: 파스타, 짬뽕) *">
+
+            <!-- 추천 코멘트 / 방문 꿀팁 -->
+            <textarea id="modalComment" placeholder="추천 이유 / 꿀팁 / 코멘트 (예: 점심 12시 전 필수, 소스 듬뿍 달라고 하세요!)" rows="2" style="width:100%; padding:10px 12px; margin-bottom:8px; border:1px solid #ddd; border-radius:8px; font-size:13px; font-family:inherit; outline:none; resize:none;"></textarea>
+
+            <!-- 사진 업로드 및 미리보기 영역 -->
+            <div class="image-upload-section">
+                <div class="image-preview-box" id="modalImagePreviewBox">
+                    <img id="modalImagePreview" src="" alt="가게 사진">
+                    <button type="button" class="btn-remove-img" onclick="clearModalImage()">✕</button>
+                </div>
+                <label class="btn-upload-trigger" for="modalImageFileInput">
+                    <span>📷 가게 대표 사진 등록 (파일 선택 또는 네이버 자동)</span>
+                </label>
+                <input type="file" id="modalImageFileInput" accept="image/*" style="display:none;" onchange="handleModalImageSelect(event)">
+            </div>
             
             <button class="btn-save-restaurant" onclick="saveRestaurantFromModal()">2. 지도에 핀 등록하기</button>
         </div>
@@ -670,6 +796,95 @@
         let selectedRestaurantForDrawer = null;
         let fetchedDescModal = "";
         let cachedModalCoords = null;
+        let currentModalImageUrl = "";
+        let currentReviewImageUrl = "";
+
+        // 이미지 압축 유틸리티 (Canvas 기반 800px, JPEG 0.75)
+        function compressImageFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const maxDim = 800;
+
+                        if (width > height && width > maxDim) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                        } else if (height > maxDim) {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                        resolve(dataUrl);
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 모달 이미지 제어
+        async function handleModalImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const compressed = await compressImageFile(file);
+                setModalImage(compressed);
+            } catch (err) {
+                alert('이미지 파일 처리 중 오류가 발생했습니다.');
+            }
+        }
+
+        function setModalImage(url) {
+            currentModalImageUrl = url || '';
+            const box = document.getElementById('modalImagePreviewBox');
+            const img = document.getElementById('modalImagePreview');
+            if (url) {
+                img.src = url;
+                box.style.display = 'block';
+            } else {
+                img.src = '';
+                box.style.display = 'none';
+            }
+        }
+
+        function clearModalImage() {
+            setModalImage('');
+            document.getElementById('modalImageFileInput').value = '';
+        }
+
+        // 리뷰 이미지 제어
+        async function handleReviewImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const compressed = await compressImageFile(file);
+                currentReviewImageUrl = compressed;
+                const preview = document.getElementById('reviewUploadPreview');
+                const nameEl = document.getElementById('reviewUploadFileName');
+                nameEl.innerText = `📷 사진 첨부 완료 (${file.name || '이미지'})`;
+                preview.style.display = 'flex';
+            } catch (err) {
+                alert('이미지 처리 중 오류가 발생했습니다.');
+            }
+        }
+
+        function clearReviewImage() {
+            currentReviewImageUrl = '';
+            document.getElementById('reviewImageFile').value = '';
+            document.getElementById('reviewUploadPreview').style.display = 'none';
+        }
 
         window.addEventListener('DOMContentLoaded', async () => {
             await loadAllRestaurantsData();
@@ -825,6 +1040,27 @@
             document.getElementById('drawerAddress').innerText = `📍 ${item.address || '주소 정보 없음'}`;
             document.getElementById('drawerMenu').innerText = `🍴 대표 메뉴: ${item.menu || '미등록'}`;
 
+            // 대표 이미지 배너 설정
+            const imgBanner = document.getElementById('drawerImageBanner');
+            if (item.image_url) {
+                imgBanner.src = item.image_url;
+                imgBanner.style.display = 'block';
+            } else {
+                imgBanner.src = '';
+                imgBanner.style.display = 'none';
+            }
+
+            // 등록자 코멘트 / 추천 팁 설정
+            const commentCard = document.getElementById('drawerCommentCard');
+            const commentText = document.getElementById('drawerCommentText');
+            const cmt = item.comment || item.description;
+            if (cmt) {
+                commentText.innerText = cmt;
+                commentCard.style.display = 'block';
+            } else {
+                commentCard.style.display = 'none';
+            }
+
             const linkContainer = document.getElementById('drawerLinkContainer');
             if (item.naver_link) {
                 linkContainer.innerHTML = `<a href="${item.naver_link}" target="_blank" style="color:#03C75A; font-weight:700; text-decoration:none; font-size:12px;">👉 네이버 지도 바로가기</a>`;
@@ -841,6 +1077,7 @@
         function closeDrawer() {
             document.getElementById('detailDrawer').classList.remove('open');
             selectedRestaurantForDrawer = null;
+            clearReviewImage();
         }
 
         // 리뷰 로드
@@ -883,13 +1120,15 @@
             reviews.forEach(r => {
                 const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(r.rating) || 5)));
                 const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : '';
+                const photoHtml = r.image_url ? `<img src="${r.image_url}" class="review-photo-thumb" onclick="window.open('${r.image_url}')" title="사진 원본 보기">` : '';
                 html += `
                     <div class="review-card">
                         <div class="review-card-top">
                             <span>${stars} (${r.rating}점)</span>
                             <span style="color:#aaa;">${dateStr}</span>
                         </div>
-                        <div style="color:#333;">${escapeHtml(r.comment || '')}</div>
+                        <div style="color:#333; margin-bottom:4px;">${escapeHtml(r.comment || '')}</div>
+                        ${photoHtml}
                     </div>
                 `;
             });
@@ -915,17 +1154,26 @@
                 restaurant_id: typeof rId === 'number' ? rId : null,
                 rating: rating,
                 comment: comment,
+                image_url: currentReviewImageUrl,
                 created_at: new Date().toISOString()
             };
 
-            // 1) Supabase 저장 시도
+            // 1) Supabase 저장 시도 (스키마 자동 적응)
             if (supabaseClient && typeof rId === 'number') {
                 try {
-                    await supabaseClient.from('reviews').insert([{
-                        restaurant_id: rId,
-                        rating: rating,
-                        comment: comment
-                    }]);
+                    let payload = { ...newRev };
+                    for (let t = 0; t < 4; t++) {
+                        const { error } = await supabaseClient.from('reviews').insert([payload]);
+                        if (!error) break;
+                        if (error && error.message) {
+                            const m = error.message.match(/Could not find the '([^']+)' column/i);
+                            if (m && m[1]) {
+                                delete payload[m[1]];
+                                continue;
+                            }
+                        }
+                        break;
+                    }
                 } catch (e) {}
             }
 
@@ -938,6 +1186,7 @@
             } catch (e) {}
 
             commentInput.value = '';
+            clearReviewImage();
             await loadDrawerReviews(rId);
         }
 
@@ -950,6 +1199,8 @@
 
         function closeAddModal() {
             document.getElementById('addModal').style.display = 'none';
+            clearModalImage();
+            document.getElementById('modalComment').value = '';
         }
 
         // 네이버 링크 자동 파싱
@@ -980,6 +1231,11 @@
                     document.getElementById('modalPlaceCategory').value = data.category;
                 }
 
+                // 대표 사진 자동 연동
+                if (data.image_url) {
+                    setModalImage(data.image_url);
+                }
+
                 // 서버에서 제공한 고정밀 좌표 캐싱
                 if (data.lat && data.lng) {
                     cachedModalCoords = { lat: data.lat, lng: data.lng };
@@ -990,7 +1246,6 @@
                 if (!data.address) {
                     alert('가게 이름은 불러왔으나 주소가 누락되었습니다. 주소를 직접 입력해 주세요.');
                 } else {
-                    // 대표 메뉴 입력창으로 자연스럽게 포커스
                     document.getElementById('modalMenuInfo').focus();
                 }
             } catch (e) {
@@ -1007,6 +1262,7 @@
             const address = document.getElementById('modalPlaceAddress').value.trim();
             const category = document.getElementById('modalPlaceCategory').value;
             const menu = document.getElementById('modalMenuInfo').value.trim();
+            const comment = document.getElementById('modalComment').value.trim();
             const link = document.getElementById('naverLinkInput').value.trim();
 
             if (!name || !address) {
@@ -1016,24 +1272,22 @@
 
             // 1. 서버에서 가져온 정확한 좌표가 있는 경우 바로 저장 진행
             if (cachedModalCoords && cachedModalCoords.lat && cachedModalCoords.lng) {
-                proceedSaveRestaurant(name, address, category, menu, link, cachedModalCoords.lat, cachedModalCoords.lng);
+                proceedSaveRestaurant(name, address, category, menu, link, cachedModalCoords.lat, cachedModalCoords.lng, comment, currentModalImageUrl);
                 return;
             }
 
             // 2. 좌표가 없거나 주소를 직접 수정한 경우 Geocoder 실행
-            // 층수/호수 등 지오코딩 실패 원인이 되는 상세 주소 정제 (예: '청명로 6 1층' -> '청명로 6')
             const cleanQuery = address.replace(/\s+(?:\d+층|\d+호|[가-힣a-zA-Z0-9]+층|[가-힣a-zA-Z0-9]+호).*$/, '').trim();
 
             naver.maps.Service.geocode({ query: cleanQuery || address }, function(status, response) {
                 if (status === naver.maps.Service.Status.OK && response.v2.addresses.length > 0) {
                     const result = response.v2.addresses[0];
-                    proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result.y), parseFloat(result.x));
+                    proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result.y), parseFloat(result.x), comment, currentModalImageUrl);
                 } else {
-                    // 원본 주소로 재시도
                     naver.maps.Service.geocode({ query: address }, function(status2, response2) {
                         if (status2 === naver.maps.Service.Status.OK && response2.v2.addresses.length > 0) {
                             const result2 = response2.v2.addresses[0];
-                            proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result2.y), parseFloat(result2.x));
+                            proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result2.y), parseFloat(result2.x), comment, currentModalImageUrl);
                         } else {
                             alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소(예: 경기 수원시 영통구 청명로 6)로 입력해 주세요.');
                         }
@@ -1043,12 +1297,15 @@
         }
 
         // 실제 맛집 데이터베이스 저장 및 핀 렌더링
-        async function proceedSaveRestaurant(name, address, category, menu, link, lat, lng) {
+        async function proceedSaveRestaurant(name, address, category, menu, link, lat, lng, comment, imageUrl) {
             const itemData = {
                 name: name,
                 address: address,
                 category: category,
                 menu: menu,
+                comment: comment,
+                description: comment, // 구버전 필드 호환
+                image_url: imageUrl || '',
                 naver_link: link,
                 lat: lat,
                 lng: lng
@@ -1060,7 +1317,7 @@
             if (supabaseClient) {
                 try {
                     let payload = { ...itemData };
-                    for (let t = 0; t < 5; t++) {
+                    for (let t = 0; t < 6; t++) {
                         const { data, error } = await supabaseClient.from('restaurants').insert([payload]).select();
                         if (!error && data && data.length > 0) {
                             savedId = data[0].id;
@@ -1095,6 +1352,8 @@
             document.getElementById('modalPlaceName').value = '';
             document.getElementById('modalPlaceAddress').value = '';
             document.getElementById('modalMenuInfo').value = '';
+            document.getElementById('modalComment').value = '';
+            clearModalImage();
             cachedModalCoords = null;
             closeAddModal();
 

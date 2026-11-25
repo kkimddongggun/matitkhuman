@@ -74,6 +74,13 @@ class MatitkhumanHandler(http.server.SimpleHTTPRequestHandler):
                 lat = coord.get("latitude")
                 lng = coord.get("longitude")
 
+                # 대표 사진 이미지 추출
+                img_list = detail.get("images", {}).get("images", [])
+                image_url = ""
+                if img_list and isinstance(img_list, list):
+                    first_img = img_list[0]
+                    image_url = first_img.get("origin") or first_img.get("originalUrl") or ""
+
                 # 음식 종류 카테고리 자동 판별
                 category = "기타"
                 if any(k in category_raw for k in ["한식", "찌개", "국밥", "고기", "삼겹살", "갈비", "냉면", "백반", "구이"]):
@@ -99,6 +106,7 @@ class MatitkhumanHandler(http.server.SimpleHTTPRequestHandler):
                     "category_raw": category_raw,
                     "lat": float(lat) if lat else None,
                     "lng": float(lng) if lng else None,
+                    "image_url": image_url,
                     "final_url": final_url
                 }
             else:
