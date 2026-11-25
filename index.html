@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>맛있쿠만 - 경희대 국제캠 맛집 지도</title>
+    <title>맛잇khu만 - 경희대 국제캠 맛집 지도</title>
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; padding: 0; font-family: 'Pretendard', 'Malgun Gothic', sans-serif; overflow: hidden; background: #f8f9fa; }
@@ -590,7 +590,7 @@
     <!-- 1. 첫 화면: 맛집 검색 및 '뭘 먹고 싶으신가요?' 카테고리 선택 모달 -->
     <div class="landing-overlay" id="landingOverlay">
         <div class="landing-card">
-            <span class="landing-badge">경희대 맛집 탐방 '맛있쿠만'</span>
+            <span class="landing-badge">경희대 맛집 탐방 '맛잇khu만'</span>
             <h2>오늘 뭘 먹고 싶으신가요? 🍽️</h2>
             <p>카테고리를 선택하거나 메뉴/가게 이름을 검색해 보세요!</p>
 
@@ -651,7 +651,7 @@
     <div class="top-nav">
         <div class="nav-left">
             <div class="nav-logo" onclick="openLanding()">
-                <span>🍽️ 맛있쿠만</span>
+                <span>🍽️ 맛잇khu만</span>
             </div>
             <div class="current-filter-badge" id="currentFilterText">
                 선택 안 됨
@@ -986,31 +986,36 @@
             if (filtered[0] && filtered[0].lat && filtered[0].lng) {
                 map.panTo(new naver.maps.LatLng(filtered[0].lat, filtered[0].lng));
             }
+
+            // 별점 평균 비동기 업데이트 (핀 렌더 후)
+            refreshMarkerRatings();
         }
 
         // 5. 콤팩트 커스텀 핀 생성 (가게이름, 대표음식, 평점만 깔끔하게 노출)
-        function createCompactMarker(item) {
-            const coords = new naver.maps.LatLng(item.lat, item.lng);
-
-            // 가게 평점 계산
-            const ratingDisplay = item.avg_rating ? item.avg_rating.toFixed(1) : 'NEW';
-
-            const markerContent = `
+        function buildPinContent(item) {
+            const ratingDisplay = (item.avg_rating != null && item.avg_rating > 0)
+                ? '⭐ ' + Number(item.avg_rating).toFixed(1)
+                : 'NEW';
+            return `
                 <div class="custom-pin">
                     <div class="pin-top">
                         <span class="pin-name">${escapeHtml(item.name || '맛집')}</span>
-                        <span class="pin-rating">⭐ ${ratingDisplay}</span>
+                        <span class="pin-rating">${ratingDisplay}</span>
                     </div>
                     <div class="pin-menu">${escapeHtml(item.menu || item.category || '추천메뉴')}</div>
                     <div class="pin-arrow"></div>
                 </div>
             `;
+        }
+
+        function createCompactMarker(item) {
+            const coords = new naver.maps.LatLng(item.lat, item.lng);
 
             const marker = new naver.maps.Marker({
                 position: coords,
                 map: map,
                 icon: {
-                    content: markerContent,
+                    content: buildPinContent(item),
                     anchor: new naver.maps.Point(60, 44)
                 }
             });
@@ -1027,6 +1032,52 @@
                 marker: marker,
                 data: item
             });
+        }
+
+        // 핀의 별점 평균을 Supabase에서 가져와 실시간 업데이트
+        async function refreshMarkerRatings() {
+            if (!supabaseClient || allMarkers.length === 0) return;
+
+            try {
+                // 현재 지도에 표시된 restaurant id 목록 (숫자 id만)
+                const numericIds = allMarkers
+                    .map(m => m.id)
+                    .filter(id => typeof id === 'number');
+
+                if (numericIds.length === 0) return;
+
+                // reviews 테이블에서 restaurant_id별 평균 평점 집계
+                const { data, error } = await supabaseClient
+                    .from('reviews')
+                    .select('restaurant_id, rating')
+                    .in('restaurant_id', numericIds);
+
+                if (error || !data) return;
+
+                // restaurant_id별 평균 계산
+                const ratingMap = {};
+                data.forEach(r => {
+                    const rid = r.restaurant_id;
+                    if (!ratingMap[rid]) ratingMap[rid] = { sum: 0, cnt: 0 };
+                    ratingMap[rid].sum += Number(r.rating) || 0;
+                    ratingMap[rid].cnt += 1;
+                });
+
+                // 각 마커 핀 업데이트
+                allMarkers.forEach(m => {
+                    const info = ratingMap[m.id];
+                    if (info && info.cnt > 0) {
+                        const avg = info.sum / info.cnt;
+                        m.data.avg_rating = avg;
+                        m.marker.setIcon({
+                            content: buildPinContent(m.data),
+                            anchor: new naver.maps.Point(60, 44)
+                        });
+                    }
+                });
+            } catch (e) {
+                console.warn('별점 업데이트 실패:', e);
+            }
         }
 
         // ==========================================
@@ -1188,6 +1239,9 @@
             commentInput.value = '';
             clearReviewImage();
             await loadDrawerReviews(rId);
+
+            // 리뷰 등록 후 해당 핀 별점 즉시 갱신
+            refreshMarkerRatings();
         }
 
         // ==========================================

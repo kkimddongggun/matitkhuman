@@ -1,10 +1,10 @@
-@echo off
+﻿@echo off
 chcp 65001 > nul
 set PATH=C:\Users\user\AppData\Local\Programs\Git\cmd;%PATH%
 cd /d "%~dp0"
 
 echo ========================================================
-echo   [맛있쿠만] GitHub 푸시 및 Render 자동 재배포
+echo   [맛잇khu만] GitHub 푸시 및 Render 자동 재배포
 echo ========================================================
 echo.
 echo 1. GitHub 기기 인증을 시작합니다.

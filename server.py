@@ -1,4 +1,4 @@
-import http.server
+﻿import http.server
 import socketserver
 import urllib.parse
 import json
@@ -117,5 +117,5 @@ class MatitkhumanHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     with socketserver.TCPServer(("", PORT), MatitkhumanHandler) as httpd:
-        print(f"맛있쿠만 서버 실행 중: http://localhost:{PORT}")
+        print(f"맛잇khu만 서버 실행 중: http://localhost:{PORT}")
         httpd.serve_forever()
