@@ -658,6 +658,80 @@
             display: inline-block;
             margin-bottom: 4px;
         }
+        .nav-user-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #fff0f3;
+            color: #9E1B32;
+            padding: 6px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1px solid #ffc9c9;
+        }
+        .btn-logout-sm {
+            background: #9E1B32;
+            color: white;
+            border: none;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-edit-mine {
+            background: rgba(255,255,255,0.22);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.45);
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 8px;
+            margin-left: 6px;
+        }
+        .btn-edit-mine:hover { background: rgba(255,255,255,0.35); }
+        .btn-review-edit {
+            background: #e9ecef;
+            color: #495057;
+            border: none;
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 6px;
+        }
+        .btn-review-edit:hover { background: #dee2e6; }
+        .review-login-prompt {
+            text-align: center;
+            padding: 10px 6px;
+            font-size: 12px;
+            color: #666;
+        }
+        .review-login-prompt button {
+            margin-top: 8px;
+            width: 100%;
+            background: #9E1B32;
+            color: white;
+            border: none;
+            padding: 9px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .review-logged-user {
+            font-size: 11px;
+            font-weight: 700;
+            color: #0ca678;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
     </style>
 
     <!-- 네이버 지도 API + Geocoder -->
@@ -722,7 +796,10 @@
 
             <div class="landing-footer-actions">
                 <button class="btn-view-all" onclick="selectCategory('전체')">📍 모든 맛집 핀 둘러보기</button>
-                <a href="admin.html" class="btn-admin-link">⚙️ 관리자 모드</a>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span id="landingAuthArea"></span>
+                    <a href="admin.html" class="btn-admin-link">⚙️ 관리자 모드</a>
+                </div>
             </div>
         </div>
     </div>
@@ -740,6 +817,7 @@
         </div>
 
         <div class="nav-right">
+            <div id="navAuthArea"></div>
             <button class="btn-action btn-primary-action" onclick="openAddModal()">
                 <span>+ 맛집 추가</span>
             </button>
@@ -760,7 +838,10 @@
             <h3 class="drawer-title" id="drawerTitle">가게 이름</h3>
             <div class="drawer-address" id="drawerAddress">📍 주소</div>
             <div class="drawer-menu" id="drawerMenu">🍴 대표: 메뉴</div>
-            <div class="drawer-author" id="drawerAuthor" style="display:none;"></div>
+            <div>
+                <span class="drawer-author" id="drawerAuthor" style="display:none;"></span>
+                <button type="button" class="btn-edit-mine" id="btnEditMyRestaurant" style="display:none;" onclick="openEditMyRestaurantModal()">✏️ 내 글 수정</button>
+            </div>
             <div id="drawerLinkContainer" style="margin-top: 8px;"></div>
         </div>
 
@@ -784,47 +865,52 @@
         </div>
 
         <div class="drawer-footer">
-            <div class="review-author-row">
-                <input type="text" id="newRevStudentId" placeholder="학번 입력 *" oninput="lookupMemberForReview()">
-                <span id="revAuthorInfo" class="author-badge-inline">학번 입력 시 이름/학과 자동 표시</span>
+            <!-- 비로그인 시 안내 -->
+            <div class="review-login-prompt" id="reviewLoginPrompt">
+                <div>🔒 댓글과 별점은 동아리 회원 로그인 후 작성할 수 있습니다.</div>
+                <button type="button" onclick="openLoginModal()">🔑 로그인하고 리뷰 남기기</button>
             </div>
-            <div class="review-upload-preview" id="reviewUploadPreview">
-                <span id="reviewUploadFileName">📷 사진 첨부됨</span>
-                <button type="button" style="background:none;border:none;cursor:pointer;color:#fa5252;font-weight:bold;" onclick="clearReviewImage()">✕ 취소</button>
+
+            <!-- 로그인 시 리뷰 작성 폼 -->
+            <div id="reviewFormContainer" style="display: none;">
+                <div class="review-logged-user">
+                    <span id="reviewLoggedUserText">👤 로그인됨</span>
+                </div>
+                <div class="review-upload-preview" id="reviewUploadPreview">
+                    <span id="reviewUploadFileName">📷 사진 첨부됨</span>
+                    <button type="button" style="background:none;border:none;cursor:pointer;color:#fa5252;font-weight:bold;" onclick="clearReviewImage()">✕ 취소</button>
+                </div>
+                <div class="review-input-row">
+                    <select id="newRevRating">
+                        <option value="5">⭐⭐⭐⭐⭐ 5점</option>
+                        <option value="4">⭐⭐⭐⭐ 4점</option>
+                        <option value="3">⭐⭐⭐ 3점</option>
+                        <option value="2">⭐⭐ 2점</option>
+                        <option value="1">⭐ 1점</option>
+                    </select>
+                    <input type="text" id="newRevComment" placeholder="한줄평 작성..." onkeydown="if(event.key==='Enter') submitReviewFromDrawer()">
+                    <button type="button" style="background:#f1f3f5; border:1px solid #ddd; padding:8px 12px; border-radius:8px; font-size:14px; cursor:pointer;" onclick="document.getElementById('reviewImageFile').click()" title="사진 첨부">📷</button>
+                    <input type="file" id="reviewImageFile" accept="image/*" style="display:none;" onchange="handleReviewImageSelect(event)">
+                </div>
+                <button class="btn-submit-review" onclick="submitReviewFromDrawer()">별점 & 리뷰 등록</button>
             </div>
-            <div class="review-input-row">
-                <select id="newRevRating">
-                    <option value="5">⭐⭐⭐⭐⭐ 5점</option>
-                    <option value="4">⭐⭐⭐⭐ 4점</option>
-                    <option value="3">⭐⭐⭐ 3점</option>
-                    <option value="2">⭐⭐ 2점</option>
-                    <option value="1">⭐ 1점</option>
-                </select>
-                <input type="text" id="newRevComment" placeholder="한줄평 작성..." onkeydown="if(event.key==='Enter') submitReviewFromDrawer()">
-                <button type="button" style="background:#f1f3f5; border:1px solid #ddd; padding:8px 12px; border-radius:8px; font-size:14px; cursor:pointer;" onclick="document.getElementById('reviewImageFile').click()" title="사진 첨부">📷</button>
-                <input type="file" id="reviewImageFile" accept="image/*" style="display:none;" onchange="handleReviewImageSelect(event)">
-            </div>
-            <button class="btn-submit-review" onclick="submitReviewFromDrawer()">별점 & 리뷰 등록</button>
         </div>
     </div>
 
-    <!-- 5. 분리된 맛집 등록 모달 -->
+    <!-- 5. 분리된 맛집 등록/수정 모달 -->
     <div class="modal-overlay" id="addModal">
         <div class="modal-box">
             <h3>
-                <span>🍽️ 새로운 맛집 핀 등록</span>
+                <span id="addModalTitle">🍽️ 새로운 맛집 핀 등록</span>
                 <button class="modal-close-btn" onclick="closeAddModal()">✕</button>
             </h3>
+
+            <!-- 로그인된 작성자 표시 -->
+            <div id="modalLoggedUserBadge" class="author-lookup-badge found" style="margin-bottom: 10px;"></div>
 
             <!-- 1. 네이버 링크 자동 추출 -->
             <input type="text" id="naverLinkInput" placeholder="네이버 지도 공유 링크 (https://naver.me/...)">
             <button class="btn-parse" onclick="fetchFromNaverLinkModal()">1. 네이버 링크에서 정보 자동 추출</button>
-
-            <!-- 등록자 학번 확인 -->
-            <div class="modal-author-box">
-                <input type="text" id="modalStudentId" placeholder="등록자 학번 입력 (예: 2023101234) *" oninput="lookupMemberForModal()">
-                <div id="modalAuthorInfo" class="author-lookup-badge">학번을 입력하면 이름과 학과가 자동으로 표시됩니다.</div>
-            </div>
 
             <!-- 2. 가게 정보 입력 -->
             <input type="text" id="modalPlaceName" placeholder="맛집 이름 *">
@@ -858,7 +944,43 @@
                 <input type="file" id="modalImageFileInput" accept="image/*" style="display:none;" onchange="handleModalImageSelect(event)">
             </div>
             
-            <button class="btn-save-restaurant" onclick="saveRestaurantFromModal()">2. 지도에 핀 등록하기</button>
+            <button class="btn-save-restaurant" id="btnSaveRestaurant" onclick="saveRestaurantFromModal()">2. 지도에 핀 등록하기</button>
+        </div>
+    </div>
+
+    <!-- 6. 동아리 회원 로그인 모달 -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal-box" style="width: 360px;">
+            <h3>
+                <span>🔑 맛잇khu만 로그인</span>
+                <button class="modal-close-btn" onclick="closeLoginModal()">✕</button>
+            </h3>
+            <p style="font-size: 12px; color: #666; margin: 0 0 14px 0; line-height: 1.5;">
+                관리자 페이지에 등록된 <b>학번</b>과 <b>이름</b>으로 바로 로그인할 수 있습니다.<br>
+                (비로그인으로도 지도와 맛집 탐방은 자유롭게 가능합니다!)
+            </p>
+            <input type="text" id="loginStudentId" placeholder="학번 입력 (예: 2023101234)" onkeydown="if(event.key==='Enter') handleLogin()">
+            <input type="text" id="loginName" placeholder="이름 입력 (예: 홍길동)" onkeydown="if(event.key==='Enter') handleLogin()">
+            <button class="btn-save-restaurant" onclick="handleLogin()">로그인하기</button>
+        </div>
+    </div>
+
+    <!-- 7. 내 댓글 수정 모달 -->
+    <div class="modal-overlay" id="editReviewModal">
+        <div class="modal-box" style="width: 360px;">
+            <h3>
+                <span>✏️ 내 리뷰 수정</span>
+                <button class="modal-close-btn" onclick="closeEditReviewModal()">✕</button>
+            </h3>
+            <select id="editRevRating">
+                <option value="5">⭐⭐⭐⭐⭐ 5점</option>
+                <option value="4">⭐⭐⭐⭐ 4점</option>
+                <option value="3">⭐⭐⭐ 3점</option>
+                <option value="2">⭐⭐ 2점</option>
+                <option value="1">⭐ 1점</option>
+            </select>
+            <input type="text" id="editRevComment" placeholder="한줄평 내용..." onkeydown="if(event.key==='Enter') saveEditedReview()">
+            <button class="btn-save-restaurant" onclick="saveEditedReview()">수정 완료</button>
         </div>
     </div>
 
@@ -884,6 +1006,10 @@
 
         let allRestaurantsData = [];
         let allMembersData = [];
+        let currentUser = null;
+        let editingRestaurantId = null;
+        let editingReviewIdx = null;
+        let currentDrawerReviews = [];
         let allMarkers = []; // [{ id, category, marker, data }]
         let selectedRestaurantForDrawer = null;
         let fetchedDescModal = "";
@@ -979,9 +1105,121 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
+            restoreLoginSession();
             await Promise.all([loadAllRestaurantsData(), loadAllMembersData()]);
+            updateAuthUI();
             // 첫 화면은 핀을 띄우지 않고, 랜딩 모달 유지!
         });
+
+        // 로그인 세션 복원
+        function restoreLoginSession() {
+            try {
+                const saved = localStorage.getItem('matitkhuman_user');
+                if (saved) {
+                    currentUser = JSON.parse(saved);
+                }
+            } catch (e) {
+                currentUser = null;
+            }
+            updateAuthUI();
+        }
+
+        // 로그인 UI 동기화
+        function updateAuthUI() {
+            const navArea = document.getElementById('navAuthArea');
+            const landingArea = document.getElementById('landingAuthArea');
+            const reviewPrompt = document.getElementById('reviewLoginPrompt');
+            const reviewForm = document.getElementById('reviewFormContainer');
+            const reviewUserText = document.getElementById('reviewLoggedUserText');
+
+            if (currentUser) {
+                const userLabel = `${escapeHtml(currentUser.name)} (${escapeHtml(currentUser.department || '')})`;
+                if (navArea) {
+                    navArea.innerHTML = `<div class="nav-user-badge">👤 ${userLabel} <button class="btn-logout-sm" onclick="logoutUser()">로그아웃</button></div>`;
+                }
+                if (landingArea) {
+                    landingArea.innerHTML = `<span style="font-size:12px;font-weight:700;color:#9E1B32;">👤 ${escapeHtml(currentUser.name)}</span> <a href="javascript:void(0)" class="btn-admin-link" onclick="logoutUser()">로그아웃</a>`;
+                }
+                if (reviewPrompt) reviewPrompt.style.display = 'none';
+                if (reviewForm) reviewForm.style.display = 'block';
+                if (reviewUserText) reviewUserText.innerText = `👤 작성자: ${currentUser.name} (${currentUser.department || ''})`;
+            } else {
+                if (navArea) {
+                    navArea.innerHTML = `<button class="btn-action" onclick="openLoginModal()"><span>🔑 로그인</span></button>`;
+                }
+                if (landingArea) {
+                    landingArea.innerHTML = `<a href="javascript:void(0)" class="btn-admin-link" onclick="openLoginModal()">🔑 로그인</a>`;
+                }
+                if (reviewPrompt) reviewPrompt.style.display = 'block';
+                if (reviewForm) reviewForm.style.display = 'none';
+            }
+
+            // Drawer가 열려있으면 본인 글/댓글 수정 버튼 상태도 갱신
+            if (selectedRestaurantForDrawer) {
+                const editBtn = document.getElementById('btnEditMyRestaurant');
+                if (editBtn) {
+                    const isMine = currentUser && selectedRestaurantForDrawer.author_student_id
+                        && String(currentUser.student_id) === String(selectedRestaurantForDrawer.author_student_id);
+                    editBtn.style.display = isMine ? 'inline-block' : 'none';
+                }
+                loadDrawerReviews(selectedRestaurantForDrawer.id);
+            }
+        }
+
+        function openLoginModal() {
+            document.getElementById('loginStudentId').value = '';
+            document.getElementById('loginName').value = '';
+            document.getElementById('loginModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('loginStudentId').focus(), 50);
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        async function handleLogin() {
+            const sid = document.getElementById('loginStudentId').value.trim();
+            const name = document.getElementById('loginName').value.trim();
+
+            if (!sid || !name) {
+                alert('학번과 이름을 모두 입력해주세요!');
+                return;
+            }
+
+            // 최신 인원 목록 다시 불러와 확인
+            await loadAllMembersData();
+
+            const matched = allMembersData.find(m =>
+                String(m.student_id || '').trim() === sid &&
+                String(m.name || '').trim() === name
+            );
+
+            if (!matched) {
+                alert('등록된 회원 정보와 일치하지 않습니다.\n관리자 페이지에서 인원(학번, 이름, 학과)을 먼저 등록해주세요.');
+                return;
+            }
+
+            currentUser = {
+                student_id: matched.student_id,
+                name: matched.name,
+                department: matched.department
+            };
+            try {
+                localStorage.setItem('matitkhuman_user', JSON.stringify(currentUser));
+            } catch (e) {}
+
+            closeLoginModal();
+            updateAuthUI();
+            alert(`환영합니다, ${currentUser.name} (${currentUser.department}) 님! 🎉`);
+        }
+
+        function logoutUser() {
+            currentUser = null;
+            try {
+                localStorage.removeItem('matitkhuman_user');
+            } catch (e) {}
+            updateAuthUI();
+        }
 
         // 동아리 인원 목록 불러오기 (Supabase + LocalStorage)
         async function loadAllMembersData() {
@@ -1024,46 +1262,6 @@
             const target = String(sid || '').trim();
             if (!target) return null;
             return allMembersData.find(m => String(m.student_id || '').trim() === target) || null;
-        }
-
-        function lookupMemberForModal() {
-            const sid = document.getElementById('modalStudentId').value.trim();
-            const infoEl = document.getElementById('modalAuthorInfo');
-            if (!sid) {
-                infoEl.className = 'author-lookup-badge';
-                infoEl.innerText = '학번을 입력하면 이름과 학과가 자동으로 표시됩니다.';
-                return null;
-            }
-            const member = findMemberByStudentId(sid);
-            if (member) {
-                infoEl.className = 'author-lookup-badge found';
-                infoEl.innerText = `✅ ${member.name} (${member.department})`;
-                return member;
-            } else {
-                infoEl.className = 'author-lookup-badge not-found';
-                infoEl.innerText = '❌ 등록되지 않은 학번입니다. (관리자 페이지에서 등록 필요)';
-                return null;
-            }
-        }
-
-        function lookupMemberForReview() {
-            const sid = document.getElementById('newRevStudentId').value.trim();
-            const infoEl = document.getElementById('revAuthorInfo');
-            if (!sid) {
-                infoEl.className = 'author-badge-inline';
-                infoEl.innerText = '학번 입력 시 이름/학과 자동 표시';
-                return null;
-            }
-            const member = findMemberByStudentId(sid);
-            if (member) {
-                infoEl.className = 'author-badge-inline found';
-                infoEl.innerText = `✅ ${member.name} (${member.department})`;
-                return member;
-            } else {
-                infoEl.className = 'author-badge-inline not-found';
-                infoEl.innerText = '❌ 미등록 학번';
-                return null;
-            }
         }
 
         // 1. 전체 맛집 데이터 불러오기 (Supabase + LocalStorage)
@@ -1266,7 +1464,7 @@
             document.getElementById('drawerAddress').innerText = `📍 ${item.address || '주소 정보 없음'}`;
             document.getElementById('drawerMenu').innerText = `🍴 대표 메뉴: ${item.menu || '미등록'}`;
 
-            // 등록자 정보 표시
+            // 등록자 정보 표시 & 본인 글 수정 버튼 제어
             const authorEl = document.getElementById('drawerAuthor');
             if (item.author_name) {
                 const deptPart = item.author_department ? ` (${item.author_department})` : '';
@@ -1274,6 +1472,12 @@
                 authorEl.style.display = 'inline-block';
             } else {
                 authorEl.style.display = 'none';
+            }
+            const editBtn = document.getElementById('btnEditMyRestaurant');
+            if (editBtn) {
+                const isMine = currentUser && item.author_student_id
+                    && String(currentUser.student_id) === String(item.author_student_id);
+                editBtn.style.display = isMine ? 'inline-block' : 'none';
             }
 
             // 대표 이미지 배너 설정
@@ -1352,18 +1556,24 @@
             const avg = (sum / reviews.length).toFixed(1);
             ratingBanner.innerHTML = `⭐ <b>${avg}</b> / 5.0 (${reviews.length}개의 리뷰)`;
 
+            currentDrawerReviews = reviews;
             let html = '';
-            reviews.forEach(r => {
+            reviews.forEach((r, idx) => {
                 const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(r.rating) || 5)));
                 const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : '';
                 const photoHtml = r.image_url ? `<img src="${r.image_url}" class="review-photo-thumb" onclick="window.open('${r.image_url}')" title="사진 원본 보기">` : '';
                 const authorTag = r.author_name
                     ? `<div class="review-author-tag">👤 ${escapeHtml(r.author_name)}${r.author_department ? ' (' + escapeHtml(r.author_department) + ')' : ''}</div>`
                     : '';
+                const isMyReview = currentUser && r.author_student_id
+                    && String(currentUser.student_id) === String(r.author_student_id);
+                const editBtnHtml = isMyReview
+                    ? `<button type="button" class="btn-review-edit" onclick="openEditReviewModal(${idx})">✏️ 수정</button>`
+                    : '';
                 html += `
                     <div class="review-card">
                         <div class="review-card-top">
-                            <span>${stars} (${r.rating}점)</span>
+                            <span>${stars} (${r.rating}점)${editBtnHtml}</span>
                             <span style="color:#aaa;">${dateStr}</span>
                         </div>
                         ${authorTag}
@@ -1375,23 +1585,72 @@
             listEl.innerHTML = html;
         }
 
+        // 내 리뷰 수정 모달 제어
+        function openEditReviewModal(idx) {
+            const target = currentDrawerReviews[idx];
+            if (!target) return;
+            editingReviewIdx = idx;
+            document.getElementById('editRevRating').value = String(target.rating || 5);
+            document.getElementById('editRevComment').value = target.comment || '';
+            document.getElementById('editReviewModal').style.display = 'flex';
+        }
+
+        function closeEditReviewModal() {
+            document.getElementById('editReviewModal').style.display = 'none';
+            editingReviewIdx = null;
+        }
+
+        async function saveEditedReview() {
+            if (editingReviewIdx === null || !selectedRestaurantForDrawer) return;
+            const target = currentDrawerReviews[editingReviewIdx];
+            if (!target) return;
+
+            const newRating = parseInt(document.getElementById('editRevRating').value, 10);
+            const newComment = document.getElementById('editRevComment').value.trim();
+            if (!newComment) {
+                alert('한줄평을 입력해주세요!');
+                return;
+            }
+
+            if (supabaseClient && target.id) {
+                try {
+                    await supabaseClient
+                        .from('reviews')
+                        .update({ rating: newRating, comment: newComment })
+                        .eq('id', target.id);
+                } catch (e) {}
+            }
+
+            try {
+                const rId = selectedRestaurantForDrawer.id;
+                const allLoc = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                if (allLoc[rId]) {
+                    allLoc[rId] = allLoc[rId].map(item => {
+                        if (item.created_at === target.created_at && item.comment === target.comment) {
+                            return { ...item, rating: newRating, comment: newComment };
+                        }
+                        return item;
+                    });
+                    localStorage.setItem('matitkhuman_reviews', JSON.stringify(allLoc));
+                }
+            } catch (e) {}
+
+            closeEditReviewModal();
+            await loadDrawerReviews(selectedRestaurantForDrawer.id);
+            refreshMarkerRatings();
+            alert('리뷰가 수정되었습니다!');
+        }
+
         // 리뷰 등록
         async function submitReviewFromDrawer() {
             if (!selectedRestaurantForDrawer) return;
 
-            const studentIdInput = document.getElementById('newRevStudentId');
-            const studentId = studentIdInput.value.trim();
-            if (!studentId) {
-                alert('작성자 학번을 입력해주세요!');
-                studentIdInput.focus();
+            if (!currentUser) {
+                alert('댓글 작성은 로그인 후 가능합니다.');
+                openLoginModal();
                 return;
             }
-            const member = findMemberByStudentId(studentId);
-            if (!member) {
-                alert('등록되지 않은 학번입니다. 관리자 페이지에서 인원을 먼저 등록해주세요!');
-                studentIdInput.focus();
-                return;
-            }
+            const member = currentUser;
 
             const rating = parseInt(document.getElementById('newRevRating').value, 10);
             const commentInput = document.getElementById('newRevComment');
@@ -1451,18 +1710,54 @@
         }
 
         // ==========================================
-        // ➕ 분리된 맛집 등록 모달 창 제어
+        // ➕ 분리된 맛집 등록/수정 모달 창 제어
         // ==========================================
         function openAddModal() {
+            if (!currentUser) {
+                alert('맛집 등록은 로그인 후 이용할 수 있습니다.');
+                openLoginModal();
+                return;
+            }
+            editingRestaurantId = null;
+            document.getElementById('addModalTitle').innerText = '🍽️ 새로운 맛집 핀 등록';
+            document.getElementById('btnSaveRestaurant').innerText = '2. 지도에 핀 등록하기';
+            document.getElementById('modalLoggedUserBadge').innerText = `👤 등록자: ${currentUser.name} (${currentUser.department || ''})`;
+            document.getElementById('naverLinkInput').value = '';
+            document.getElementById('modalPlaceName').value = '';
+            document.getElementById('modalPlaceAddress').value = '';
+            document.getElementById('modalPlaceCategory').value = '기타';
+            document.getElementById('modalMenuInfo').value = '';
+            document.getElementById('modalComment').value = '';
+            clearModalImage();
+            cachedModalCoords = null;
+            document.getElementById('addModal').style.display = 'flex';
+        }
+
+        function openEditMyRestaurantModal() {
+            if (!currentUser || !selectedRestaurantForDrawer) return;
+            const item = selectedRestaurantForDrawer;
+            editingRestaurantId = item.id;
+            document.getElementById('addModalTitle').innerText = '✏️ 내 맛집 정보 수정';
+            document.getElementById('btnSaveRestaurant').innerText = '수정 내용 저장하기';
+            document.getElementById('modalLoggedUserBadge').innerText = `👤 작성자: ${currentUser.name} (${currentUser.department || ''})`;
+
+            document.getElementById('naverLinkInput').value = item.naver_link || '';
+            document.getElementById('modalPlaceName').value = item.name || '';
+            document.getElementById('modalPlaceAddress').value = item.address || '';
+            document.getElementById('modalPlaceCategory').value = item.category || '기타';
+            document.getElementById('modalMenuInfo').value = item.menu || '';
+            document.getElementById('modalComment').value = item.comment || item.description || '';
+            setModalImage(item.image_url || '');
+            cachedModalCoords = (item.lat && item.lng) ? { lat: item.lat, lng: item.lng } : null;
+
             document.getElementById('addModal').style.display = 'flex';
         }
 
         function closeAddModal() {
             document.getElementById('addModal').style.display = 'none';
+            editingRestaurantId = null;
             clearModalImage();
             document.getElementById('modalComment').value = '';
-            document.getElementById('modalStudentId').value = '';
-            lookupMemberForModal();
         }
 
         // 네이버 링크 자동 파싱
@@ -1520,18 +1815,12 @@
 
         // 모달에서 맛집 저장
         function saveRestaurantFromModal() {
-            const studentId = document.getElementById('modalStudentId').value.trim();
-            if (!studentId) {
-                alert('등록자 학번을 입력해주세요!');
-                document.getElementById('modalStudentId').focus();
+            if (!currentUser) {
+                alert('로그인 후 이용해주세요.');
+                openLoginModal();
                 return;
             }
-            const member = findMemberByStudentId(studentId);
-            if (!member) {
-                alert('등록되지 않은 학번입니다. 관리자 페이지에서 인원을 먼저 등록해주세요!');
-                document.getElementById('modalStudentId').focus();
-                return;
-            }
+            const member = currentUser;
 
             const name = document.getElementById('modalPlaceName').value.trim();
             const address = document.getElementById('modalPlaceAddress').value.trim();
@@ -1571,7 +1860,7 @@
             });
         }
 
-        // 실제 맛집 데이터베이스 저장 및 핀 렌더링
+        // 실제 맛집 데이터베이스 저장 및 핀 렌더링 (등록 & 수정 공용)
         async function proceedSaveRestaurant(name, address, category, menu, link, lat, lng, comment, imageUrl, member) {
             const itemData = {
                 name: name,
@@ -1588,6 +1877,46 @@
                 author_name: member ? member.name : '',
                 author_department: member ? member.department : ''
             };
+
+            // [수정 모드]
+            if (editingRestaurantId !== null) {
+                const targetId = editingRestaurantId;
+                if (supabaseClient && !String(targetId).startsWith('loc_')) {
+                    try {
+                        let payload = { ...itemData };
+                        for (let t = 0; t < 6; t++) {
+                            const { error } = await supabaseClient.from('restaurants').update(payload).eq('id', targetId);
+                            if (!error) break;
+                            if (error && error.message) {
+                                const m = error.message.match(/Could not find the '([^']+)' column/i);
+                                if (m && m[1]) {
+                                    delete payload[m[1]];
+                                    continue;
+                                }
+                            }
+                            break;
+                        }
+                    } catch (e) {}
+                }
+
+                try {
+                    let locals = JSON.parse(localStorage.getItem('matitkhuman_restaurants') || '[]');
+                    const idx = locals.findIndex(r => String(r.id) === String(targetId));
+                    if (idx !== -1) {
+                        locals[idx] = { ...locals[idx], ...itemData };
+                        localStorage.setItem('matitkhuman_restaurants', JSON.stringify(locals));
+                    }
+                } catch (e) {}
+
+                const memTarget = allRestaurantsData.find(r => String(r.id) === String(targetId));
+                if (memTarget) Object.assign(memTarget, itemData);
+
+                closeAddModal();
+                selectCategory(category);
+                if (memTarget) openDetailDrawer(memTarget);
+                alert(`'${name}' 맛집 정보가 수정되었습니다! 🎉`);
+                return;
+            }
 
             let savedId = null;
 
