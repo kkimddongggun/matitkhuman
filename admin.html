@@ -319,6 +319,7 @@
         <!-- 탭 전환 버튼 -->
         <div class="admin-tabs">
             <button class="tab-btn active" id="tabBtnRestaurants" onclick="switchTab('restaurants')">🍽️ 맛집 관리</button>
+            <button class="tab-btn" id="tabBtnReviews" onclick="switchTab('reviews')">💬 댓글(리뷰) 관리</button>
             <button class="tab-btn" id="tabBtnMembers" onclick="switchTab('members')">👥 동아리 인원 관리</button>
         </div>
 
@@ -395,6 +396,38 @@
                 </table>
             </div>
         </div>
+
+        <!-- 3. 댓글(리뷰) 관리 섹션 -->
+        <div id="reviewsSection" style="display: none;">
+            <div class="toolbar">
+                <div class="search-box">
+                    <input type="text" id="reviewSearchInput" placeholder="가게 이름, 작성자(이름/학번), 댓글 내용으로 검색..." oninput="renderReviewTable()">
+                </div>
+                <div class="stats" id="reviewStatsCount">총 등록된 댓글: 0개</div>
+            </div>
+
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>가게 이름</th>
+                            <th style="width: 80px;">별점</th>
+                            <th>작성자</th>
+                            <th>댓글 내용</th>
+                            <th style="width: 100px;">작성일</th>
+                            <th style="width: 90px; text-align: center;">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reviewTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #888; padding: 30px;">
+                                댓글 데이터를 불러오는 중입니다...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- 수정 모달 -->
@@ -448,6 +481,7 @@
 
         let allRestaurants = [];
         let allMembers = [];
+        let allReviews = [];
 
         // 관리자 인증 (비밀번호: 1234)
         function checkAdminAuth() {
@@ -455,7 +489,7 @@
             if (pw === '1234') {
                 sessionStorage.setItem('matit_admin_auth_v2', 'true');
                 document.getElementById('authOverlay').style.display = 'none';
-                loadAllRestaurants();
+                loadAllRestaurants().then(() => loadAllReviews());
                 loadAllMembers();
             } else {
                 alert('비밀번호가 올바르지 않습니다.');
@@ -465,18 +499,20 @@
         window.addEventListener('DOMContentLoaded', () => {
             if (sessionStorage.getItem('matit_admin_auth_v2') === 'true') {
                 document.getElementById('authOverlay').style.display = 'none';
-                loadAllRestaurants();
+                loadAllRestaurants().then(() => loadAllReviews());
                 loadAllMembers();
             }
         });
 
         // 탭 전환
         function switchTab(tab) {
-            const isRest = tab === 'restaurants';
-            document.getElementById('restaurantsSection').style.display = isRest ? 'block' : 'none';
-            document.getElementById('membersSection').style.display = isRest ? 'none' : 'block';
-            document.getElementById('tabBtnRestaurants').classList.toggle('active', isRest);
-            document.getElementById('tabBtnMembers').classList.toggle('active', !isRest);
+            document.getElementById('restaurantsSection').style.display = tab === 'restaurants' ? 'block' : 'none';
+            document.getElementById('reviewsSection').style.display = tab === 'reviews' ? 'block' : 'none';
+            document.getElementById('membersSection').style.display = tab === 'members' ? 'block' : 'none';
+
+            document.getElementById('tabBtnRestaurants').classList.toggle('active', tab === 'restaurants');
+            document.getElementById('tabBtnReviews').classList.toggle('active', tab === 'reviews');
+            document.getElementById('tabBtnMembers').classList.toggle('active', tab === 'members');
         }
 
         // 데이터 불러오기 (Supabase + LocalStorage)
@@ -812,6 +848,134 @@
 
             allMembers = allMembers.filter(m => String(m.student_id) !== String(studentId));
             renderMemberTable();
+        }
+
+        // ==========================================
+        // 💬 댓글(리뷰) 관리 기능
+        // ==========================================
+        async function loadAllReviews() {
+            let list = [];
+            const keySet = new Set();
+
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('reviews')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (!error && data) {
+                        data.forEach(r => {
+                            const key = `${r.restaurant_id}_${r.created_at}_${r.comment}`;
+                            keySet.add(key);
+                            list.push({ ...r, _source: 'supabase' });
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Supabase reviews 조회 생략:', e);
+                }
+            }
+
+            try {
+                const allLoc = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                Object.keys(allLoc).forEach(rId => {
+                    const arr = allLoc[rId] || [];
+                    arr.forEach(r => {
+                        const key = `${r.restaurant_id || rId}_${r.created_at}_${r.comment}`;
+                        if (!keySet.has(key)) {
+                            keySet.add(key);
+                            list.push({ ...r, _localRestId: rId });
+                        }
+                    });
+                });
+            } catch (e) {}
+
+            // 최신순 정렬
+            list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+            allReviews = list;
+            renderReviewTable();
+        }
+
+        function getRestaurantNameById(rId) {
+            if (!rId) return '(알 수 없음)';
+            const found = allRestaurants.find(r => String(r.id) === String(rId));
+            return found ? found.name : `(ID: ${rId})`;
+        }
+
+        function renderReviewTable() {
+            const query = document.getElementById('reviewSearchInput').value.trim().toLowerCase();
+            const tbody = document.getElementById('reviewTableBody');
+            const countEl = document.getElementById('reviewStatsCount');
+
+            const filtered = allReviews.map((r, idx) => ({ ...r, _idx: idx })).filter(r => {
+                if (!query) return true;
+                const restName = getRestaurantNameById(r.restaurant_id || r._localRestId).toLowerCase();
+                const author = `${r.author_name || ''} ${r.author_student_id || ''} ${r.author_department || ''}`.toLowerCase();
+                const comment = (r.comment || '').toLowerCase();
+                return restName.includes(query) || author.includes(query) || comment.includes(query);
+            });
+
+            countEl.innerText = `총 등록된 댓글: ${filtered.length}개`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #888; padding: 30px;">등록된 댓글이 없거나 검색 결과가 없습니다.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(r => {
+                const restName = getRestaurantNameById(r.restaurant_id || r._localRestId);
+                const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : '-';
+                const authorStr = r.author_name
+                    ? `${escapeHtml(r.author_name)} <small style="color:#888;">(${escapeHtml(r.author_student_id || '')} / ${escapeHtml(r.author_department || '')})</small>`
+                    : '<span style="color:#aaa;">미기록</span>';
+                html += `
+                    <tr>
+                        <td><strong>${escapeHtml(restName)}</strong></td>
+                        <td>⭐ ${r.rating || 5}점</td>
+                        <td>${authorStr}</td>
+                        <td>${escapeHtml(r.comment || '')}</td>
+                        <td style="color:#888; font-size:12px;">${dateStr}</td>
+                        <td style="text-align: center;">
+                            <button class="btn-delete" onclick="deleteReview(${r._idx})">삭제</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        async function deleteReview(idx) {
+            const target = allReviews[idx];
+            if (!target) return;
+
+            if (!confirm(`이 댓글을 정말 삭제하시겠습니까?\n"${target.comment}"`)) return;
+
+            // 1) Supabase 삭제 시도
+            if (supabaseClient && target.id) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('reviews')
+                        .delete()
+                        .eq('id', target.id);
+                    if (error) console.warn('Supabase 댓글 삭제 에러:', error);
+                } catch (e) {}
+            }
+
+            // 2) LocalStorage에서도 삭제
+            try {
+                const allLoc = JSON.parse(localStorage.getItem('matitkhuman_reviews') || '{}');
+                Object.keys(allLoc).forEach(rId => {
+                    allLoc[rId] = (allLoc[rId] || []).filter(item =>
+                        !(item.created_at === target.created_at && item.comment === target.comment)
+                    );
+                });
+                localStorage.setItem('matitkhuman_reviews', JSON.stringify(allLoc));
+            } catch (e) {}
+
+            allReviews.splice(idx, 1);
+            renderReviewTable();
+            alert('댓글이 삭제되었습니다.');
         }
 
         function escapeHtml(str) {
