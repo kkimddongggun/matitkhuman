@@ -578,6 +578,86 @@
             cursor: pointer;
             margin-top: 6px;
         }
+
+        /* 학번 기반 작성자 자동완성 스타일 */
+        .modal-author-box {
+            margin-bottom: 10px;
+        }
+        .modal-author-box input {
+            margin-bottom: 4px !important;
+        }
+        .author-lookup-badge {
+            font-size: 12px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: #f1f3f5;
+            color: #666;
+            font-weight: 600;
+        }
+        .author-lookup-badge.found {
+            background: #e6fcf5;
+            color: #0ca678;
+            border: 1px solid #c3fae8;
+        }
+        .author-lookup-badge.not-found {
+            background: #fff5f5;
+            color: #e03131;
+            border: 1px solid #ffc9c9;
+        }
+        .review-author-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .review-author-row input {
+            width: 135px;
+            padding: 7px 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 12px;
+            outline: none;
+        }
+        .review-author-row input:focus { border-color: #9E1B32; }
+        .author-badge-inline {
+            flex: 1;
+            font-size: 11px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: #f1f3f5;
+            color: #666;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .author-badge-inline.found {
+            background: #e6fcf5;
+            color: #0ca678;
+        }
+        .author-badge-inline.not-found {
+            background: #fff5f5;
+            color: #e03131;
+        }
+        .drawer-author {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(255,255,255,0.18);
+            padding: 3px 9px;
+            border-radius: 12px;
+        }
+        .review-author-tag {
+            font-size: 11px;
+            font-weight: 700;
+            color: #495057;
+            background: #f1f3f5;
+            padding: 2px 7px;
+            border-radius: 6px;
+            display: inline-block;
+            margin-bottom: 4px;
+        }
     </style>
 
     <!-- 네이버 지도 API + Geocoder -->
@@ -680,6 +760,7 @@
             <h3 class="drawer-title" id="drawerTitle">가게 이름</h3>
             <div class="drawer-address" id="drawerAddress">📍 주소</div>
             <div class="drawer-menu" id="drawerMenu">🍴 대표: 메뉴</div>
+            <div class="drawer-author" id="drawerAuthor" style="display:none;"></div>
             <div id="drawerLinkContainer" style="margin-top: 8px;"></div>
         </div>
 
@@ -703,6 +784,10 @@
         </div>
 
         <div class="drawer-footer">
+            <div class="review-author-row">
+                <input type="text" id="newRevStudentId" placeholder="학번 입력 *" oninput="lookupMemberForReview()">
+                <span id="revAuthorInfo" class="author-badge-inline">학번 입력 시 이름/학과 자동 표시</span>
+            </div>
             <div class="review-upload-preview" id="reviewUploadPreview">
                 <span id="reviewUploadFileName">📷 사진 첨부됨</span>
                 <button type="button" style="background:none;border:none;cursor:pointer;color:#fa5252;font-weight:bold;" onclick="clearReviewImage()">✕ 취소</button>
@@ -734,6 +819,12 @@
             <!-- 1. 네이버 링크 자동 추출 -->
             <input type="text" id="naverLinkInput" placeholder="네이버 지도 공유 링크 (https://naver.me/...)">
             <button class="btn-parse" onclick="fetchFromNaverLinkModal()">1. 네이버 링크에서 정보 자동 추출</button>
+
+            <!-- 등록자 학번 확인 -->
+            <div class="modal-author-box">
+                <input type="text" id="modalStudentId" placeholder="등록자 학번 입력 (예: 2023101234) *" oninput="lookupMemberForModal()">
+                <div id="modalAuthorInfo" class="author-lookup-badge">학번을 입력하면 이름과 학과가 자동으로 표시됩니다.</div>
+            </div>
 
             <!-- 2. 가게 정보 입력 -->
             <input type="text" id="modalPlaceName" placeholder="맛집 이름 *">
@@ -792,6 +883,7 @@
         });
 
         let allRestaurantsData = [];
+        let allMembersData = [];
         let allMarkers = []; // [{ id, category, marker, data }]
         let selectedRestaurantForDrawer = null;
         let fetchedDescModal = "";
@@ -887,9 +979,92 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            await loadAllRestaurantsData();
+            await Promise.all([loadAllRestaurantsData(), loadAllMembersData()]);
             // 첫 화면은 핀을 띄우지 않고, 랜딩 모달 유지!
         });
+
+        // 동아리 인원 목록 불러오기 (Supabase + LocalStorage)
+        async function loadAllMembersData() {
+            let list = [];
+            const idSet = new Set();
+
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('members')
+                        .select('*');
+
+                    if (!error && data) {
+                        data.forEach(m => {
+                            const sid = String(m.student_id || '').trim();
+                            if (sid && !idSet.has(sid)) {
+                                idSet.add(sid);
+                                list.push(m);
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            try {
+                const locals = JSON.parse(localStorage.getItem('matitkhuman_members') || '[]');
+                locals.forEach(m => {
+                    const sid = String(m.student_id || '').trim();
+                    if (sid && !idSet.has(sid)) {
+                        idSet.add(sid);
+                        list.push(m);
+                    }
+                });
+            } catch (e) {}
+
+            allMembersData = list;
+        }
+
+        function findMemberByStudentId(sid) {
+            const target = String(sid || '').trim();
+            if (!target) return null;
+            return allMembersData.find(m => String(m.student_id || '').trim() === target) || null;
+        }
+
+        function lookupMemberForModal() {
+            const sid = document.getElementById('modalStudentId').value.trim();
+            const infoEl = document.getElementById('modalAuthorInfo');
+            if (!sid) {
+                infoEl.className = 'author-lookup-badge';
+                infoEl.innerText = '학번을 입력하면 이름과 학과가 자동으로 표시됩니다.';
+                return null;
+            }
+            const member = findMemberByStudentId(sid);
+            if (member) {
+                infoEl.className = 'author-lookup-badge found';
+                infoEl.innerText = `✅ ${member.name} (${member.department})`;
+                return member;
+            } else {
+                infoEl.className = 'author-lookup-badge not-found';
+                infoEl.innerText = '❌ 등록되지 않은 학번입니다. (관리자 페이지에서 등록 필요)';
+                return null;
+            }
+        }
+
+        function lookupMemberForReview() {
+            const sid = document.getElementById('newRevStudentId').value.trim();
+            const infoEl = document.getElementById('revAuthorInfo');
+            if (!sid) {
+                infoEl.className = 'author-badge-inline';
+                infoEl.innerText = '학번 입력 시 이름/학과 자동 표시';
+                return null;
+            }
+            const member = findMemberByStudentId(sid);
+            if (member) {
+                infoEl.className = 'author-badge-inline found';
+                infoEl.innerText = `✅ ${member.name} (${member.department})`;
+                return member;
+            } else {
+                infoEl.className = 'author-badge-inline not-found';
+                infoEl.innerText = '❌ 미등록 학번';
+                return null;
+            }
+        }
 
         // 1. 전체 맛집 데이터 불러오기 (Supabase + LocalStorage)
         async function loadAllRestaurantsData() {
@@ -1091,6 +1266,16 @@
             document.getElementById('drawerAddress').innerText = `📍 ${item.address || '주소 정보 없음'}`;
             document.getElementById('drawerMenu').innerText = `🍴 대표 메뉴: ${item.menu || '미등록'}`;
 
+            // 등록자 정보 표시
+            const authorEl = document.getElementById('drawerAuthor');
+            if (item.author_name) {
+                const deptPart = item.author_department ? ` (${item.author_department})` : '';
+                authorEl.innerText = `👤 등록자: ${item.author_name}${deptPart}`;
+                authorEl.style.display = 'inline-block';
+            } else {
+                authorEl.style.display = 'none';
+            }
+
             // 대표 이미지 배너 설정
             const imgBanner = document.getElementById('drawerImageBanner');
             if (item.image_url) {
@@ -1172,12 +1357,16 @@
                 const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(r.rating) || 5)));
                 const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : '';
                 const photoHtml = r.image_url ? `<img src="${r.image_url}" class="review-photo-thumb" onclick="window.open('${r.image_url}')" title="사진 원본 보기">` : '';
+                const authorTag = r.author_name
+                    ? `<div class="review-author-tag">👤 ${escapeHtml(r.author_name)}${r.author_department ? ' (' + escapeHtml(r.author_department) + ')' : ''}</div>`
+                    : '';
                 html += `
                     <div class="review-card">
                         <div class="review-card-top">
                             <span>${stars} (${r.rating}점)</span>
                             <span style="color:#aaa;">${dateStr}</span>
                         </div>
+                        ${authorTag}
                         <div style="color:#333; margin-bottom:4px;">${escapeHtml(r.comment || '')}</div>
                         ${photoHtml}
                     </div>
@@ -1189,6 +1378,20 @@
         // 리뷰 등록
         async function submitReviewFromDrawer() {
             if (!selectedRestaurantForDrawer) return;
+
+            const studentIdInput = document.getElementById('newRevStudentId');
+            const studentId = studentIdInput.value.trim();
+            if (!studentId) {
+                alert('작성자 학번을 입력해주세요!');
+                studentIdInput.focus();
+                return;
+            }
+            const member = findMemberByStudentId(studentId);
+            if (!member) {
+                alert('등록되지 않은 학번입니다. 관리자 페이지에서 인원을 먼저 등록해주세요!');
+                studentIdInput.focus();
+                return;
+            }
 
             const rating = parseInt(document.getElementById('newRevRating').value, 10);
             const commentInput = document.getElementById('newRevComment');
@@ -1206,6 +1409,9 @@
                 rating: rating,
                 comment: comment,
                 image_url: currentReviewImageUrl,
+                author_student_id: member.student_id,
+                author_name: member.name,
+                author_department: member.department,
                 created_at: new Date().toISOString()
             };
 
@@ -1255,6 +1461,8 @@
             document.getElementById('addModal').style.display = 'none';
             clearModalImage();
             document.getElementById('modalComment').value = '';
+            document.getElementById('modalStudentId').value = '';
+            lookupMemberForModal();
         }
 
         // 네이버 링크 자동 파싱
@@ -1312,6 +1520,19 @@
 
         // 모달에서 맛집 저장
         function saveRestaurantFromModal() {
+            const studentId = document.getElementById('modalStudentId').value.trim();
+            if (!studentId) {
+                alert('등록자 학번을 입력해주세요!');
+                document.getElementById('modalStudentId').focus();
+                return;
+            }
+            const member = findMemberByStudentId(studentId);
+            if (!member) {
+                alert('등록되지 않은 학번입니다. 관리자 페이지에서 인원을 먼저 등록해주세요!');
+                document.getElementById('modalStudentId').focus();
+                return;
+            }
+
             const name = document.getElementById('modalPlaceName').value.trim();
             const address = document.getElementById('modalPlaceAddress').value.trim();
             const category = document.getElementById('modalPlaceCategory').value;
@@ -1326,7 +1547,7 @@
 
             // 1. 서버에서 가져온 정확한 좌표가 있는 경우 바로 저장 진행
             if (cachedModalCoords && cachedModalCoords.lat && cachedModalCoords.lng) {
-                proceedSaveRestaurant(name, address, category, menu, link, cachedModalCoords.lat, cachedModalCoords.lng, comment, currentModalImageUrl);
+                proceedSaveRestaurant(name, address, category, menu, link, cachedModalCoords.lat, cachedModalCoords.lng, comment, currentModalImageUrl, member);
                 return;
             }
 
@@ -1336,12 +1557,12 @@
             naver.maps.Service.geocode({ query: cleanQuery || address }, function(status, response) {
                 if (status === naver.maps.Service.Status.OK && response.v2.addresses.length > 0) {
                     const result = response.v2.addresses[0];
-                    proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result.y), parseFloat(result.x), comment, currentModalImageUrl);
+                    proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result.y), parseFloat(result.x), comment, currentModalImageUrl, member);
                 } else {
                     naver.maps.Service.geocode({ query: address }, function(status2, response2) {
                         if (status2 === naver.maps.Service.Status.OK && response2.v2.addresses.length > 0) {
                             const result2 = response2.v2.addresses[0];
-                            proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result2.y), parseFloat(result2.x), comment, currentModalImageUrl);
+                            proceedSaveRestaurant(name, address, category, menu, link, parseFloat(result2.y), parseFloat(result2.x), comment, currentModalImageUrl, member);
                         } else {
                             alert('주소를 좌표로 변환하지 못했습니다. 도로명 주소(예: 경기 수원시 영통구 청명로 6)로 입력해 주세요.');
                         }
@@ -1351,7 +1572,7 @@
         }
 
         // 실제 맛집 데이터베이스 저장 및 핀 렌더링
-        async function proceedSaveRestaurant(name, address, category, menu, link, lat, lng, comment, imageUrl) {
+        async function proceedSaveRestaurant(name, address, category, menu, link, lat, lng, comment, imageUrl, member) {
             const itemData = {
                 name: name,
                 address: address,
@@ -1362,7 +1583,10 @@
                 image_url: imageUrl || '',
                 naver_link: link,
                 lat: lat,
-                lng: lng
+                lng: lng,
+                author_student_id: member ? member.student_id : '',
+                author_name: member ? member.name : '',
+                author_department: member ? member.department : ''
             };
 
             let savedId = null;
